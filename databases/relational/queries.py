@@ -287,9 +287,55 @@ def register_user(
     NOTE: passwords are stored as plain text here intentionally for teaching
     purposes. In production, replace with a salted hash (e.g. bcrypt).
     """
-    raise NotImplementedError("TODO: implement after designing your schema")
 
+    with _connect() as conn:
+        with conn.cursor() as cur:
 
+            # Check if email already exists
+            cur.execute(
+                """
+                SELECT 1
+                FROM users
+                WHERE email = %s
+                """,
+                (email,)
+            )
+
+            if cur.fetchone():
+                return (False, "Email already registered")
+
+            # Generate user ID
+            user_id = "RU" + ''.join(random.choices(string.digits, k=4))
+
+            # Insert new user
+            cur.execute(
+                """
+                INSERT INTO users (
+                    user_id,
+                    email,
+                    first_name,
+                    surname,
+                    year_of_birth,
+                    password,
+                    secret_question,
+                    secret_answer
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                """,
+                (
+                    user_id,
+                    email,
+                    first_name,
+                    surname,
+                    year_of_birth,
+                    password,
+                    secret_question,
+                    secret_answer
+                )
+            )
+
+            return (True, user_id)
+        
 def login_user(email: str, password: str) -> Optional[dict]:
     """
     Verify credentials. Returns a user dict on success or None on failure.
