@@ -30,6 +30,10 @@ from typing import Optional
 
 import psycopg2
 import psycopg2.extras
+from argon2 import PasswordHasher
+from argon2.exceptions import VerifyMismatchError
+
+ph = PasswordHasher()
 
 from skeleton.config import PG_DSN, VECTOR_TOP_K, VECTOR_SIMILARITY_THRESHOLD
 
@@ -283,9 +287,6 @@ def register_user(
     """
     Register a new user.
     Returns (True, user_id) on success or (False, error_message) on failure.
-
-    NOTE: passwords are stored as plain text here intentionally for teaching
-    purposes. In production, replace with a salted hash (e.g. bcrypt).
     """
 
     with _connect() as conn:
@@ -296,7 +297,8 @@ def register_user(
                 """
                 SELECT 1
                 FROM users
-                WHERE email = %s
+                WHERE LOWER(email) = LOWER(%s)
+                AND deleted_at IS NULL
                 """,
                 (email,)
             )
@@ -307,7 +309,11 @@ def register_user(
             # Generate user ID
             user_id = "RU" + ''.join(random.choices(string.digits, k=4))
 
-            # Insert new user
+            # Hash sensitive data
+            password_hash = ph.hash(password)
+            secret_answer_hash = ph.hash(secret_answer)
+
+            # Insert into users
             cur.execute(
                 """
                 INSERT INTO users (
@@ -315,22 +321,35 @@ def register_user(
                     email,
                     first_name,
                     surname,
-                    year_of_birth,
-                    password,
-                    secret_question,
-                    secret_answer
+                    year_of_birth
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s)
                 """,
                 (
                     user_id,
                     email,
                     first_name,
                     surname,
-                    year_of_birth,
-                    password,
+                    year_of_birth
+                )
+            )
+
+            # Insert into credentials table
+            cur.execute(
+                """
+                INSERT INTO user_credentials (
+                    user_id,
+                    password_hash,
                     secret_question,
-                    secret_answer
+                    secret_answer_hash
+                )
+                VALUES (%s, %s, %s, %s)
+                """,
+                (
+                    user_id,
+                    password_hash,
+                    secret_question,
+                    secret_answer_hash
                 )
             )
 
@@ -346,20 +365,41 @@ def login_user(email: str, password: str) -> Optional[dict]:
 
             cur.execute(
                 """
-                SELECT *
-                FROM users
-                WHERE email = %s
-                AND password = %s
+                SELECT
+                    u.user_id,
+                    u.first_name,
+                    u.last_name,
+                    u.email,
+                    u.phone,
+                    u.date_of_birth,
+                    u.registered_at,
+                    u.is_active,
+                    uc.password_hash
+                FROM users u
+                JOIN user_credentials uc
+                    ON u.user_id = uc.user_id
+                WHERE LOWER(u.email) = LOWER(%s)
+                AND u.deleted_at IS NULL
+                AND uc.deleted_at IS NULL
                 """,
-                (email, password)
+                (email,)
             )
 
             row = cur.fetchone()
 
-            if row:
-                return dict(row)
+            if not row:
+                return None
 
-            return None
+            try:
+                ph.verify(row["password_hash"], password)
+
+                user_data = dict(row)
+                user_data.pop("password_hash", None)
+
+                return user_data
+
+            except VerifyMismatchError:
+                return None
 
 
 def get_user_secret_question(email: str) -> Optional[str]:
@@ -389,40 +429,57 @@ def verify_secret_answer(email: str, answer: str) -> bool:
     """Return True if the provided answer matches the stored secret answer."""
 
     with _connect() as conn:
-        with conn.cursor() as cur:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
 
             cur.execute(
                 """
-                SELECT 1
-                FROM users
-                WHERE email = %s
-                AND LOWER(secret_answer) = LOWER(%s)
+                SELECT uc.secret_answer_hash
+                FROM users u
+                JOIN user_credentials uc
+                    ON u.user_id = uc.user_id
+                WHERE LOWER(u.email) = LOWER(%s)
+                AND u.deleted_at IS NULL
+                AND uc.deleted_at IS NULL
                 """,
-                (email, answer)
+                (email,)
             )
 
             row = cur.fetchone()
 
-            return row is not None
+            if not row:
+                return False
 
+            try:
+                ph.verify(row["secret_answer_hash"], answer)
+                return True
+
+            except VerifyMismatchError:
+                return False
 
 def update_password(email: str, new_password: str) -> bool:
     """Update the password for a user."""
+
+    password_hash = ph.hash(new_password)
 
     with _connect() as conn:
         with conn.cursor() as cur:
 
             cur.execute(
                 """
-                UPDATE users
-                SET password = %s
-                WHERE email = %s
+                UPDATE user_credentials
+                SET password_hash = %s
+                WHERE user_id = (
+                    SELECT user_id
+                    FROM users
+                    WHERE LOWER(email) = LOWER(%s)
+                    AND deleted_at IS NULL
+                )
+                AND deleted_at IS NULL
                 """,
-                (new_password, email)
+                (password_hash, email)
             )
 
             return cur.rowcount > 0
-
 
 # ── VECTOR / RAG QUERIES — do not modify ─────────────────────────────────────
 
