@@ -87,8 +87,88 @@ def query_national_rail_availability(
         destination_id:  e.g. "NR05"
         travel_date:     e.g. "2025-06-01" — used to count bookings; omit for general info
     """
-    raise NotImplementedError("TODO: implement after designing your schema")
 
+    with _connect() as conn:
+        with conn.cursor(
+            cursor_factory=psycopg2.extras.RealDictCursor
+        ) as cur:
+
+            cur.execute(
+                """
+                SELECT *
+                FROM national_rail_schedules
+                WHERE deleted_at IS NULL
+                """
+            )
+
+            schedules = cur.fetchall()
+
+            results = []
+
+            for row in schedules:
+
+                stops = row["stops_in_order"]
+
+                if origin_id in stops and destination_id in stops:
+
+                    origin_pos = stops.index(origin_id)
+                    destination_pos = stops.index(destination_id)
+
+                    if origin_pos < destination_pos:
+
+                        schedule_dict = dict(row)
+
+                        # ---------- total seats ----------
+                        cur.execute(
+                            """
+                            SELECT coaches
+                            FROM national_rail_seat_layouts
+                            WHERE schedule_id = %s
+                            AND deleted_at IS NULL
+                            """,
+                            (row["schedule_id"],)
+                        )
+
+                        layout = cur.fetchone()
+
+                        total_seats = 0
+
+                        if layout:
+
+                            for coach in layout["coaches"]:
+                                total_seats += len(coach["seats"])
+
+                        # ---------- booked seats ----------
+                        booked_seats = 0
+
+                        if travel_date:
+
+                            cur.execute(
+                                """
+                                SELECT COUNT(*)
+                                FROM national_rail_bookings
+                                WHERE schedule_id = %s
+                                AND travel_date = %s
+                                AND status = 'confirmed'
+                                AND deleted_at IS NULL
+                                """,
+                                (
+                                    row["schedule_id"],
+                                    travel_date
+                                )
+                            )
+
+                            booked_seats = cur.fetchone()["count"]
+
+                        schedule_dict["total_seats"] = total_seats
+                        schedule_dict["booked_seats"] = booked_seats
+                        schedule_dict["available_seats"] = (
+                            total_seats - booked_seats
+                        )
+
+                        results.append(schedule_dict)
+
+            return results
 
 def query_national_rail_fare(
     schedule_id: str,
@@ -106,8 +186,52 @@ def query_national_rail_fare(
     Returns:
         dict with fare_class, base_fare_usd, per_stop_rate_usd, total_fare_usd
     """
-    raise NotImplementedError("TODO: implement after designing your schema")
 
+    with _connect() as conn:
+        with conn.cursor(
+            cursor_factory=psycopg2.extras.RealDictCursor
+        ) as cur:
+
+            cur.execute(
+                """
+                SELECT fare_classes
+                FROM national_rail_schedules
+                WHERE schedule_id = %s
+                AND deleted_at IS NULL
+                """,
+                (schedule_id,)
+            )
+
+            row = cur.fetchone()
+
+            if not row:
+                return None
+
+            fare_classes = row["fare_classes"]
+
+            if fare_class not in fare_classes:
+                return None
+
+            base_fare = float(
+                fare_classes[fare_class]["base_fare_usd"]
+            )
+
+            per_stop_rate = float(
+                fare_classes[fare_class]["per_stop_rate_usd"]
+            )
+
+            total_fare = (
+                base_fare +
+                per_stop_rate * stops_travelled
+            )
+
+            return {
+                "fare_class": fare_class,
+                "base_fare_usd": base_fare,
+                "per_stop_rate_usd": per_stop_rate,
+                "stops_travelled": stops_travelled,
+                "total_fare_usd": round(total_fare, 2)
+            }
 
 # ── METRO SCHEDULES & FARE ────────────────────────────────────────────────────
 
@@ -119,8 +243,49 @@ def query_metro_schedules(origin_id: str, destination_id: str) -> list[dict]:
         origin_id:       e.g. "MS01"
         destination_id:  e.g. "MS09"
     """
-    raise NotImplementedError("TODO: implement after designing your schema")
 
+    with _connect() as conn:
+        with conn.cursor(
+            cursor_factory=psycopg2.extras.RealDictCursor
+        ) as cur:
+
+            cur.execute(
+                """
+                SELECT
+                    schedule_id,
+                    line,
+                    direction,
+                    origin_station_id,
+                    destination_station_id,
+                    first_train_time,
+                    last_train_time,
+                    base_fare_usd,
+                    per_stop_rate_usd,
+                    frequency_min,
+                    stops_in_order,
+                    travel_time_from_origin_min,
+                    operates_on
+                FROM metro_schedules
+                WHERE deleted_at IS NULL
+                """
+            )
+
+            schedules = cur.fetchall()
+            results = []
+
+            for row in schedules:
+
+                stops = row["stops_in_order"]
+
+                if origin_id in stops and destination_id in stops:
+
+                    origin_pos = stops.index(origin_id)
+                    destination_pos = stops.index(destination_id)
+
+                    if origin_pos < destination_pos:
+                        results.append(dict(row))
+
+            return results
 
 def query_metro_fare(schedule_id: str, stops_travelled: int) -> Optional[dict]:
     """
@@ -133,8 +298,42 @@ def query_metro_fare(schedule_id: str, stops_travelled: int) -> Optional[dict]:
     Returns:
         dict with base_fare_usd, per_stop_rate_usd, total_fare_usd
     """
-    raise NotImplementedError("TODO: implement after designing your schema")
 
+    with _connect() as conn:
+        with conn.cursor(
+            cursor_factory=psycopg2.extras.RealDictCursor
+        ) as cur:
+
+            cur.execute(
+                """
+                SELECT
+                    base_fare_usd,
+                    per_stop_rate_usd
+                FROM metro_schedules
+                WHERE schedule_id = %s
+                AND deleted_at IS NULL
+                """,
+                (schedule_id,)
+            )
+
+            row = cur.fetchone()
+
+            if not row:
+                return None
+
+            base_fare = float(row["base_fare_usd"])
+            per_stop_rate = float(row["per_stop_rate_usd"])
+
+            total_fare = base_fare + (
+                per_stop_rate * stops_travelled
+            )
+
+            return {
+                "base_fare_usd": base_fare,
+                "per_stop_rate_usd": per_stop_rate,
+                "stops_travelled": stops_travelled,
+                "total_fare_usd": round(total_fare, 2)
+            }
 
 # ── SEAT SELECTION ────────────────────────────────────────────────────────────
 
