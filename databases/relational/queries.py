@@ -710,6 +710,44 @@ def execute_booking(
                     "confirmed"
                 )
             )
+            payment_id = _gen_payment_id()
+
+            cur.execute(
+                """
+                INSERT INTO payments (
+                    payment_id,
+                    national_rail_booking_id,
+                    amount_usd,
+                    method,
+                    status,
+                    paid_at
+                )
+                VALUES (
+                    %s, %s, %s, %s, %s, NOW()
+                )
+                """,
+                (
+                    payment_id,
+                    booking_id,
+                    amount_usd,
+                    "card",
+                    "paid"
+                )
+            )
+
+            conn.commit()
+
+            return (
+                True,
+                {
+                    "booking_id": booking_id,
+                    "payment_id": payment_id,
+                    "seat_id": seat_id,
+                    "coach": coach,
+                    "amount_usd": amount_usd,
+                    "status": "confirmed"
+                }
+            )
 
 
 def execute_cancellation(
