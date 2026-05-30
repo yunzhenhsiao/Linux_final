@@ -353,7 +353,75 @@ def query_available_seats(
     Returns:
         List of dicts: {seat_id, coach, row, column}
     """
-    raise NotImplementedError("TODO: implement after designing your schema")
+
+    with _connect() as conn:
+        with conn.cursor(
+            cursor_factory=psycopg2.extras.RealDictCursor
+        ) as cur:
+
+            # 1. Get seat layout
+            cur.execute(
+                """
+                SELECT coaches
+                FROM national_rail_seat_layouts
+                WHERE schedule_id = %s
+                AND deleted_at IS NULL
+                """,
+                (schedule_id,)
+            )
+
+            layout = cur.fetchone()
+
+            if not layout:
+                return []
+
+            # 2. Get booked seats
+            cur.execute(
+                """
+                SELECT seat_id
+                FROM national_rail_bookings
+                WHERE schedule_id = %s
+                AND travel_date = %s
+                AND fare_class = %s
+                AND status = 'confirmed'
+                AND deleted_at IS NULL
+                """,
+                (
+                    schedule_id,
+                    travel_date,
+                    fare_class
+                )
+            )
+
+            booked_rows = cur.fetchall()
+
+            booked_seats = {
+                row["seat_id"]
+                for row in booked_rows
+            }
+
+            # 3. Build available seat list
+            available_seats = []
+
+            for coach in layout["coaches"]:
+
+                if coach["fare_class"] != fare_class:
+                    continue
+
+                for seat in coach["seats"]:
+
+                    if seat["seat_id"] not in booked_seats:
+
+                        available_seats.append(
+                            {
+                                "seat_id": seat["seat_id"],
+                                "coach": coach["coach"],
+                                "row": seat["row"],
+                                "column": seat["column"]
+                            }
+                        )
+
+            return available_seats
 
 
 def auto_select_adjacent_seats(available_seats: list[dict], count: int) -> list[str]:
