@@ -256,6 +256,8 @@ def hide_all_panels():
 # ── Example queries ────────────────────────────────────────────────────────────
 
 EXAMPLES = [
+    "What stations can I reach from MS01 within 30 minutes?",
+    "What stations can I reach from NR01 within 45 minutes?",
     "What national rail trains run from Central (NR01) to Stonehaven (NR05)?",
     "What is the fastest metro route from MS01 to MS14?",
     "How do I get from Central Square (MS01) to Stonehaven (NR05)?",
