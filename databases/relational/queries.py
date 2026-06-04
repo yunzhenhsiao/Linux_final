@@ -1203,8 +1203,8 @@ def query_user_travel_history(user_email: str) -> list[dict]:
 # The goal is to provide analytics data that can support
 # dashboards, travel-pattern analysis, and operational planning.
 #
-# Unlike existing booking-history queries that focus on a
-# single user, this function provides system-wide statistics
+# Unlike existing booking-history queries that focus on 
+# a single user, this function provides system-wide statistics
 # that reveal the most frequently travelled routes.
 
 def query_route_statistics() -> dict:
