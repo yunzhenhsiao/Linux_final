@@ -1,4 +1,3 @@
-# TASK 6 EXTENSION: Agent tool exposure for graph reachability analysis.
 """
 TransitFlow — Intelligent Agent
 ================================
@@ -48,6 +47,13 @@ from databases.relational.queries import (
     execute_booking,
     execute_cancellation,
     query_policy_vector_search,
+    get_user_role,
+    query_employee_operations_summary,
+    query_admin_all_users,
+    query_admin_update_user_role,
+    query_admin_policy_list,
+    query_admin_system_stats,
+    query_admin_top_passengers,
 )
 from databases.graph.queries import (
     query_shortest_route,
@@ -256,11 +262,11 @@ TOOLS = [
     },
     {
         "name": "find_alternative_routes",
-        "description": "Find routes that avoid a specific delayed or closed station.",
+        "description": "Find alternative routes that avoid a specific station (e.g., if it's closed, delayed, or disrupted). Returns multiple route options bypassing the specified station. Use when the user mentions a station is 'closed', 'broken', 'disrupted', or asks for 'alternative', 'bypass', 'avoid', or 'other route'.",
         "parameters": {
             "origin_id":        {"type": "string", "description": "e.g. NR01"},
             "destination_id":   {"type": "string", "description": "e.g. NR05"},
-            "avoid_station_id": {"type": "string", "description": "The station to avoid e.g. NR03"},
+            "avoid_station_id": {"type": "string", "description": "The station to avoid e.g. NR03 (closed, disrupted, or delayed)"},
             "network":          {"type": "string", "description": "metro, rail, or auto"},
         },
         "required": ["origin_id", "destination_id", "avoid_station_id"],
@@ -283,6 +289,65 @@ TOOLS = [
         },
         "required": ["origin_id"],
     },
+    # ── EMPLOYEE TOOLS ────────────────────────────────────────────────────
+    {
+        "name": "employee_get_operations_summary",
+        "description": (
+            "Retrieve operational statistics for today: total bookings, revenue, occupancy rates, "
+            "busiest stations, and recent delays. Only available to employees and admins."
+        ),
+        "parameters": {},
+        "required": [],
+    },
+    # ── ADMIN TOOLS ───────────────────────────────────────────────────────
+    {
+        "name": "admin_get_system_stats",
+        "description": (
+            "Get system-wide statistics: user counts by role, booking/payment statistics, "
+            "revenue data. Only available to admins."
+        ),
+        "parameters": {},
+        "required": [],
+    },
+    {
+        "name": "admin_list_all_users",
+        "description": (
+            "Get a list of all registered users with their roles, active status, and registration dates. "
+            "Only available to admins."
+        ),
+        "parameters": {},
+        "required": [],
+    },
+    {
+        "name": "admin_update_user_role",
+        "description": (
+            "Change a user's role to passenger, employee, or admin. "
+            "Only available to admins. Use with caution."
+        ),
+        "parameters": {
+            "user_id": {"type": "string", "description": "The user ID to update"},
+            "new_role": {"type": "string", "description": "The new role: passenger, employee, or admin"},
+        },
+        "required": ["user_id", "new_role"],
+    },
+    {
+        "name": "admin_list_policies",
+        "description": (
+            "Get a list of all policy documents with their metadata. "
+            "Only available to admins."
+        ),
+        "parameters": {},
+        "required": [],
+    },
+    {
+        "name": "admin_get_top_passengers",
+        "description": (
+            "Get the top 10 most active passengers by booking count and spending. "
+            "Only available to admins."
+        ),
+        "parameters": {},
+        "required": [],
+    },
 ]
 
 TOOLS_SCHEMA = """\
@@ -298,7 +363,13 @@ get_user_bookings()
 search_policy(query)
 find_alternative_routes(origin_id, destination_id, avoid_station_id, network?)
 get_delay_ripple(station_id, hops?)
-get_reachable_stations(origin_id, max_time_min?)"""
+get_reachable_stations(origin_id, max_time_min?)
+employee_get_operations_summary() — requires employee/admin role
+admin_get_system_stats() — requires admin role
+admin_list_all_users() — requires admin role
+admin_update_user_role(user_id, new_role) — requires admin role
+admin_list_policies() — requires admin role
+admin_get_top_passengers() — requires admin role"""
 
 
 # ── Agent logic ───────────────────────────────────────────────────────────────
@@ -461,6 +532,44 @@ def _execute_tool(
                 # when users ask a vague question without an explicit minute value.
                 max_time_min=params.get("max_time_min", 30),
             )
+        # ── Employee tools ────────────────────────────────────────────
+        elif tool_name == "employee_get_operations_summary":
+            user_role = get_user_role(current_user_email) if current_user_email else None
+            if user_role not in ("employee", "admin"):
+                return json.dumps({"error": "Access denied. This tool is only available to employees and admins."})
+            result = query_employee_operations_summary()
+
+        # ── Admin tools ───────────────────────────────────────────────
+        elif tool_name == "admin_get_system_stats":
+            user_role = get_user_role(current_user_email) if current_user_email else None
+            if user_role != "admin":
+                return json.dumps({"error": "Access denied. This tool is only available to admins."})
+            result = query_admin_system_stats()
+
+        elif tool_name == "admin_list_all_users":
+            user_role = get_user_role(current_user_email) if current_user_email else None
+            if user_role != "admin":
+                return json.dumps({"error": "Access denied. This tool is only available to admins."})
+            result = query_admin_all_users()
+
+        elif tool_name == "admin_update_user_role":
+            user_role = get_user_role(current_user_email) if current_user_email else None
+            if user_role != "admin":
+                return json.dumps({"error": "Access denied. This tool is only available to admins."})
+            success = query_admin_update_user_role(params["user_id"], params["new_role"])
+            result = {"success": success, "message": f"User role updated to {params['new_role']}" if success else "Failed to update user role"}
+
+        elif tool_name == "admin_list_policies":
+            user_role = get_user_role(current_user_email) if current_user_email else None
+            if user_role != "admin":
+                return json.dumps({"error": "Access denied. This tool is only available to admins."})
+            result = query_admin_policy_list()
+
+        elif tool_name == "admin_get_top_passengers":
+            user_role = get_user_role(current_user_email) if current_user_email else None
+            if user_role != "admin":
+                return json.dumps({"error": "Access denied. This tool is only available to admins."})
+            result = query_admin_top_passengers()
 
         else:
             result = {"error": f"Unknown tool: {tool_name}"}
@@ -621,7 +730,9 @@ USER: "{_augmented_message}"
 Examples:
 "fastest route MS01 to MS14" -> {{"tool_calls": [{{"name": "find_route", "params": {{"origin_id": "MS01", "destination_id": "MS14", "optimise_by": "time"}}}}]}}
 "cheapest NR01 to NR05" -> {{"tool_calls": [{{"name": "find_route", "params": {{"origin_id": "NR01", "destination_id": "NR05", "optimise_by": "cost"}}}}]}}
+"if NR03 is closed, what alternative routes from NR01 to NR05?" -> {{"tool_calls": [{{"name": "find_alternative_routes", "params": {{"origin_id": "NR01", "destination_id": "NR05", "avoid_station_id": "NR03"}}}}]}}
 "trains NR01 to NR03 on 2025-06-01" -> {{"tool_calls": [{{"name": "check_national_rail_availability", "params": {{"origin_id": "NR01", "destination_id": "NR03", "travel_date": "2025-06-01"}}}}]}}
+
 "refund policy" -> {{"tool_calls": [{{"name": "search_policy", "params": {{"query": "refund policy"}}}}]}}
 "hello" -> {{"tool_calls": []}}
 "show my bookings" -> {{"tool_calls": [{{"name": "get_user_bookings", "params": {{}}}}]}}
@@ -642,6 +753,8 @@ JSON:"""
                 "Cancel a booking → cancel_booking. "
                 "Policy/rules/conduct/compensation/luggage/bicycle questions → search_policy. "
                 "Route/directions/fastest/quickest/how-to-get/path questions → find_route ONLY (never get_metro_fare). "
+                "Avoid/closed/disrupted/blocked/broken station → find_alternative_routes (not find_route). "
+                "What stations are nearby/connected to a station → get_station_connections. "
                 "Metro fare/price/cost/how-much-does-it-cost questions → get_metro_fare. "
                 "Rail fare/cost/price questions → check_national_rail_availability then get_national_rail_fare. "
                 "Schedule/timetable/trains/services questions → check_national_rail_availability or check_metro_availability. "
@@ -681,19 +794,46 @@ JSON:"""
         if debug:
             debug_info.append(f"**Fallback:** {reason} → {name}({params})")
 
-    # 1. Route / directions / path — also overrides wrong-tool selections
+    # 1. Delay ripple (affected stations by disruption) — check first if only 1 station
+    _delay_triggers = {"disruption", "delay", "affected", "impact", "ripple", "ripple effect"}
+    _is_delay = any(kw in _lower for kw in _delay_triggers)
+    if _is_delay and _station_ids and not _tool_selected("get_delay_ripple", "station_id"):
+        _fallback("get_delay_ripple",
+                  {"station_id": _station_ids[0].upper()},
+                  "delay/disruption query")
+    
+    # 1b. Alternative routes (avoid/bypass a closed/disrupted station) — only if 3+ stations
+    _avoid_triggers = {"closed", "broken", "avoid", "bypass", "alternative",
+                       "instead", "other route", "workaround", "without using", "except"}
+    _is_avoid = any(kw in _lower for kw in _avoid_triggers)
+    if _is_avoid and _two_stations and len(_station_ids) >= 3:
+        # Extract the station to avoid (typically mentioned between the two route stations)
+        # The middle station IDs are candidates for the avoid_station_id
+        _avoid_id = _station_ids[1].upper()  # Usually the middle one
+        if not _tool_selected("find_alternative_routes", "origin_id", "destination_id", "avoid_station_id"):
+            _fallback("find_alternative_routes",
+                      {"origin_id": _station_ids[0].upper(), "destination_id": _station_ids[2].upper(), "avoid_station_id": _avoid_id},
+                      "avoid/closed station query")
+    
+    # 2. Route / directions / path — also overrides wrong-tool selections
     _route_triggers = {"fastest route", "quickest route", "shortest route", "cheapest route",
                        "best route", "how to get", "directions from", "route from", "route to",
-                       "get from", "travel from", "way from", "path from"}
+                       "get from", "travel from", "way from", "path from",
+                       "fastest", "quickest", "shortest", "cheapest", "best way", "best path"}
     _is_route = (
         any(kw in _lower for kw in _route_triggers) or
-        (_two_stations and "route" in _lower)
+        (_two_stations and ("route" in _lower or "ticket" in _lower or "fare" in _lower))
     )
-    if _is_route and _two_stations and not _tool_selected("find_route", "origin_id", "destination_id"):
-        _opt = "cost" if any(kw in _lower for kw in ["cheap", "cheapest", "lowest cost"]) else "time"
-        _fallback("find_route",
-                  {"origin_id": _station_ids[0].upper(), "destination_id": _station_ids[1].upper(), "optimise_by": _opt},
-                  "route query")
+    if _is_route and _two_stations and not _is_avoid:
+        # Use regex-extracted station IDs directly (most reliable source)
+        # Don't try to extract from LLM's params — they might be from wrong tool
+        if len(_station_ids) >= 2:
+            _origin = _station_ids[0].upper()
+            _dest = _station_ids[1].upper()
+            _opt = "cost" if any(kw in _lower for kw in ["cheap", "cheapest", "lowest cost", "lowest fare", "lowest price"]) else "time"
+            _fallback("find_route",
+                      {"origin_id": _origin, "destination_id": _dest, "optimise_by": _opt},
+                      "route query")
 
     # 2. Availability / trains / schedules between two stations
     elif not tool_calls and _two_stations:

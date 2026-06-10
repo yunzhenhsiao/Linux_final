@@ -1,5 +1,3 @@
-# TASK 6 EXTENSION:
-# Travel History Dashboard and Route Statistics Analytics
 """
 TransitFlow — PostgreSQL / Relational Database Layer
 =====================================================
@@ -36,10 +34,7 @@ from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError
 
 ph = PasswordHasher()
-
 from skeleton.config import PG_DSN, VECTOR_TOP_K, VECTOR_SIMILARITY_THRESHOLD
-
-
 
 
 def _connect():
@@ -91,7 +86,6 @@ def query_national_rail_availability(
         destination_id:  e.g. "NR05"
         travel_date:     e.g. "2025-06-01" — used to count bookings; omit for general info
     """
-
     with _connect() as conn:
         with conn.cursor(
             cursor_factory=psycopg2.extras.RealDictCursor
@@ -174,6 +168,7 @@ def query_national_rail_availability(
 
             return results
 
+
 def query_national_rail_fare(
     schedule_id: str,
     fare_class: str,
@@ -190,7 +185,6 @@ def query_national_rail_fare(
     Returns:
         dict with fare_class, base_fare_usd, per_stop_rate_usd, total_fare_usd
     """
-
     with _connect() as conn:
         with conn.cursor(
             cursor_factory=psycopg2.extras.RealDictCursor
@@ -237,6 +231,7 @@ def query_national_rail_fare(
                 "total_fare_usd": round(total_fare, 2)
             }
 
+
 # ── METRO SCHEDULES & FARE ────────────────────────────────────────────────────
 
 def query_metro_schedules(origin_id: str, destination_id: str) -> list[dict]:
@@ -247,7 +242,6 @@ def query_metro_schedules(origin_id: str, destination_id: str) -> list[dict]:
         origin_id:       e.g. "MS01"
         destination_id:  e.g. "MS09"
     """
-
     with _connect() as conn:
         with conn.cursor(
             cursor_factory=psycopg2.extras.RealDictCursor
@@ -291,6 +285,7 @@ def query_metro_schedules(origin_id: str, destination_id: str) -> list[dict]:
 
             return results
 
+
 def query_metro_fare(schedule_id: str, stops_travelled: int) -> Optional[dict]:
     """
     Calculate the metro fare for a single-ticket journey.
@@ -302,7 +297,6 @@ def query_metro_fare(schedule_id: str, stops_travelled: int) -> Optional[dict]:
     Returns:
         dict with base_fare_usd, per_stop_rate_usd, total_fare_usd
     """
-
     with _connect() as conn:
         with conn.cursor(
             cursor_factory=psycopg2.extras.RealDictCursor
@@ -357,7 +351,6 @@ def query_available_seats(
     Returns:
         List of dicts: {seat_id, coach, row, column}
     """
-
     with _connect() as conn:
         with conn.cursor(
             cursor_factory=psycopg2.extras.RealDictCursor
@@ -486,7 +479,6 @@ def query_user_bookings(user_email: str) -> dict:
     Returns:
         dict with keys 'national_rail' (list) and 'metro' (list)
     """
-
     with _connect() as conn:
         with conn.cursor(
             cursor_factory=psycopg2.extras.RealDictCursor
@@ -549,9 +541,9 @@ def query_user_bookings(user_email: str) -> dict:
                 "metro": metro
             }
 
+
 def query_payment_info(booking_id: str) -> Optional[dict]:
     """Return payment record for a booking or metro trip."""
-
     with _connect() as conn:
         with conn.cursor(
             cursor_factory=psycopg2.extras.RealDictCursor
@@ -574,6 +566,7 @@ def query_payment_info(booking_id: str) -> Optional[dict]:
 
             return dict(payment)
 
+
 # ── TRANSACTIONAL OPERATIONS ──────────────────────────────────────────────────
 
 def execute_booking(
@@ -586,7 +579,23 @@ def execute_booking(
     seat_id: str,
     ticket_type: str = "single",
 ) -> tuple[bool, dict | str]:
+    """
+    Create a national rail booking for a logged-in user.
 
+    Args:
+        user_id:                e.g. "RU01" — must match the logged-in user
+        schedule_id:            e.g. "NR_SCH01"
+        origin_station_id:      e.g. "NR01"
+        destination_station_id: e.g. "NR05"
+        travel_date:            e.g. "2025-06-01"
+        fare_class:             "standard" or "first"
+        seat_id:                e.g. "B05" (or "any" to auto-assign)
+        ticket_type:            "single" (default) or "return"
+
+    Returns:
+        (True, booking_dict)   on success
+        (False, error_message) on failure
+    """
     with _connect() as conn:
         with conn.cursor(
             cursor_factory=psycopg2.extras.RealDictCursor
@@ -827,12 +836,19 @@ def register_user(
     password: str,
     secret_question: str,
     secret_answer: str,
+    role: str = "passenger",
 ) -> tuple[bool, str]:
     """
     Register a new user.
     Returns (True, user_id) on success or (False, error_message) on failure.
-    """
 
+    Args:
+        email, first_name, last_name, date_of_birth, password, secret_question, secret_answer
+        role: The user's role ('passenger', 'employee', or 'admin'). Default is 'passenger'.
+
+    NOTE: passwords are stored as plain text here intentionally for teaching
+    purposes. In production, replace with a salted hash (e.g. bcrypt).
+    """
     with _connect() as conn:
         with conn.cursor() as cur:
 
@@ -1088,13 +1104,6 @@ def store_policy_document(
             cur.execute(sql, (title, category, content, vec_str, source_file))
             return cur.fetchone()[0]
 
-
-# TASK 6 EXTENSION:
-# This function creates a unified travel-history view for a user.
-# National rail bookings and metro trips are stored in different tables.
-# We combine them into a single structure so future dashboard and analytics
-# features can display all journeys consistently.
-
 def query_user_travel_history(user_email: str) -> list[dict]:
     """
     Return a user's complete travel history.
@@ -1219,14 +1228,6 @@ def query_user_travel_history(user_email: str) -> list[dict]:
             return history
         
 # TASK 6 EXTENSION:
-# This function aggregates route usage statistics across
-# both national rail and metro systems.
-# The goal is to provide analytics data that can support
-# dashboards, travel-pattern analysis, and operational planning.
-#
-# Unlike existing booking-history queries that focus on 
-# a single user, this function provides system-wide statistics
-# that reveal the most frequently travelled routes.
 
 def query_route_statistics() -> dict:
     """
@@ -1334,3 +1335,194 @@ def query_route_statistics() -> dict:
                 "total_national_rail_bookings": total_rail,
                 "total_metro_trips": total_metro
             }
+# ── EMPLOYEE & ADMIN QUERIES ──────────────────────────────────────────────────
+
+def get_user_role(user_email: str) -> Optional[str]:
+    """Return the user's role (passenger, employee, or admin), or None if not found."""
+    with _connect() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("SELECT user_role FROM users WHERE email = %s AND deleted_at IS NULL", (user_email,))
+            row = cur.fetchone()
+            return row["user_role"] if row else None
+
+
+def query_employee_operations_summary() -> dict:
+    """
+    Return operational statistics for employees:
+    - Total bookings today
+    - Total revenue today
+    - Occupancy rates by line
+    - Top 5 busiest stations
+    - Recent delays/disruptions
+    """
+    with _connect() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            # Today's bookings & revenue
+            cur.execute("""
+                SELECT 
+                    COUNT(*) as total_bookings,
+                    SUM(amount_usd) as total_revenue,
+                    COUNT(DISTINCT user_id) as unique_passengers
+                FROM national_rail_bookings
+                WHERE travel_date = CURRENT_DATE AND status = 'confirmed'
+            """)
+            today_stats = dict(cur.fetchone()) if cur.fetchone() else {}
+
+            # Occupancy by schedule
+            cur.execute("""
+                SELECT 
+                    s.schedule_id,
+                    s.line,
+                    s.origin_station_id,
+                    s.destination_station_id,
+                    COUNT(nrb.booking_id) as booked_seats,
+                    (SELECT COUNT(*) FROM jsonb_array_elements(l.coaches) coaches, 
+                     jsonb_array_elements(coaches->'seats') seats)::int as total_seats
+                FROM national_rail_schedules s
+                LEFT JOIN national_rail_seat_layouts l ON s.schedule_id = l.schedule_id
+                LEFT JOIN national_rail_bookings nrb ON s.schedule_id = nrb.schedule_id 
+                    AND nrb.travel_date = CURRENT_DATE AND nrb.status = 'confirmed'
+                WHERE s.deleted_at IS NULL
+                GROUP BY s.schedule_id, s.line, s.origin_station_id, s.destination_station_id, l.coaches
+                LIMIT 10
+            """)
+            occupancy = [dict(row) for row in cur.fetchall()]
+
+            return {
+                "today_stats": today_stats,
+                "occupancy": occupancy,
+                "generated_at": datetime.now(timezone.utc).isoformat()
+            }
+
+
+def query_admin_all_users() -> list[dict]:
+    """Return list of all users with their basic info and roles."""
+    with _connect() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("""
+                SELECT 
+                    user_id,
+                    email,
+                    first_name,
+                    last_name,
+                    user_role,
+                    is_active,
+                    registered_at
+                FROM users
+                WHERE deleted_at IS NULL
+                ORDER BY registered_at DESC
+            """)
+            return [dict(row) for row in cur.fetchall()]
+
+
+def query_admin_update_user_role(user_id: str, new_role: str) -> bool:
+    """
+    Update a user's role (employee or admin). Only admins can call this.
+    
+    Args:
+        user_id: The user to update
+        new_role: 'passenger', 'employee', or 'admin'
+    
+    Returns:
+        True if updated, False on error
+    """
+    if new_role not in ('passenger', 'employee', 'admin'):
+        return False
+    
+    with _connect() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE users SET user_role = %s WHERE user_id = %s AND deleted_at IS NULL",
+                (new_role, user_id)
+            )
+            return cur.rowcount > 0
+
+
+def query_admin_policy_list() -> list[dict]:
+    """Return list of all policy documents."""
+    with _connect() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("""
+                SELECT 
+                    id,
+                    title,
+                    category,
+                    LENGTH(content) as content_length,
+                    source_file,
+                    created_at
+                FROM policy_documents
+                ORDER BY category, created_at DESC
+            """)
+            return [dict(row) for row in cur.fetchall()]
+
+
+def query_admin_system_stats() -> dict:
+    """Return system-wide statistics for admins."""
+    with _connect() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            # User statistics
+            cur.execute("""
+                SELECT 
+                    COUNT(*) as total_users,
+                    SUM(CASE WHEN user_role = 'admin' THEN 1 ELSE 0 END) as admin_count,
+                    SUM(CASE WHEN user_role = 'employee' THEN 1 ELSE 0 END) as employee_count,
+                    SUM(CASE WHEN user_role = 'passenger' THEN 1 ELSE 0 END) as passenger_count,
+                    SUM(CASE WHEN is_active = true THEN 1 ELSE 0 END) as active_users
+                FROM users WHERE deleted_at IS NULL
+            """)
+            user_stats = dict(cur.fetchone())
+
+            # Booking statistics
+            cur.execute("""
+                SELECT 
+                    COUNT(*) as total_bookings,
+                    SUM(CASE WHEN status = 'confirmed' THEN 1 ELSE 0 END) as confirmed,
+                    SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed,
+                    SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END) as cancelled,
+                    SUM(amount_usd) as total_revenue,
+                    AVG(amount_usd) as avg_booking_value
+                FROM national_rail_bookings WHERE deleted_at IS NULL
+            """)
+            booking_stats = dict(cur.fetchone())
+
+            # Payment statistics
+            cur.execute("""
+                SELECT 
+                    COUNT(*) as total_payments,
+                    SUM(CASE WHEN status = 'paid' THEN 1 ELSE 0 END) as paid,
+                    SUM(CASE WHEN status = 'refunded' THEN 1 ELSE 0 END) as refunded,
+                    SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed,
+                    SUM(amount_usd) as total_paid
+                FROM payments WHERE deleted_at IS NULL
+            """)
+            payment_stats = dict(cur.fetchone())
+
+            return {
+                "user_stats": user_stats,
+                "booking_stats": booking_stats,
+                "payment_stats": payment_stats,
+                "generated_at": datetime.now(timezone.utc).isoformat()
+            }
+
+
+def query_admin_top_passengers() -> list[dict]:
+    """Return top 10 most active passengers by booking count."""
+    with _connect() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("""
+                SELECT 
+                    u.user_id,
+                    u.email,
+                    u.first_name,
+                    u.last_name,
+                    COUNT(nrb.booking_id) as booking_count,
+                    SUM(nrb.amount_usd) as total_spent
+                FROM users u
+                LEFT JOIN national_rail_bookings nrb ON u.user_id = nrb.user_id 
+                    AND nrb.deleted_at IS NULL
+                WHERE u.deleted_at IS NULL AND u.user_role = 'passenger'
+                GROUP BY u.user_id, u.email, u.first_name, u.last_name
+                ORDER BY booking_count DESC
+                LIMIT 10
+            """)
+            return [dict(row) for row in cur.fetchall()]

@@ -16,12 +16,14 @@ CREATE TABLE users (
     email           VARCHAR(255) UNIQUE NOT NULL,
     phone           VARCHAR(20),
     date_of_birth   DATE,
+    user_role       VARCHAR(20) DEFAULT 'passenger' CHECK (user_role IN ('passenger', 'employee', 'admin')),
     registered_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     is_active       BOOLEAN DEFAULT TRUE,
     deleted_at      TIMESTAMP
 );
 
 CREATE INDEX idx_users_email ON users(email);
+CREATE INDEX idx_users_role ON users(user_role);
 
 -- ============================================================
 -- USER CREDENTIALS

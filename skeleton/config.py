@@ -43,3 +43,11 @@ NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD", "transitflow")
 # ── RAG settings ──────────────────────────────────────────────────────────────
 VECTOR_TOP_K           = int(os.getenv("VECTOR_TOP_K", "3"))       # How many policy chunks to retrieve
 VECTOR_SIMILARITY_THRESHOLD = float(os.getenv("VECTOR_SIMILARITY_THRESHOLD", "0.5"))
+
+# ── Identity Keys for Role Assignment ─────────────────────────────────────────
+# During registration, users can enter an identity key to set their role:
+#   (empty) → passenger (default)
+#   employee_key → employee
+#   admin_key → admin
+EMPLOYEE_KEY = os.getenv("EMPLOYEE_KEY", "emp_secret_2024")
+ADMIN_KEY = os.getenv("ADMIN_KEY", "admin_master_2024")
