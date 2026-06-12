@@ -51,3 +51,8 @@ VECTOR_SIMILARITY_THRESHOLD = float(os.getenv("VECTOR_SIMILARITY_THRESHOLD", "0.
 #   admin_key → admin
 EMPLOYEE_KEY = os.getenv("EMPLOYEE_KEY", "emp_secret_2024")
 ADMIN_KEY = os.getenv("ADMIN_KEY", "admin_master_2024")
+
+# ── Redis settings ────────────────────────────────────────────────────────────
+REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
+REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))
+REDIS_DB = int(os.getenv("REDIS_DB", "0"))

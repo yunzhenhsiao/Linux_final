@@ -885,16 +885,18 @@ def register_user(
                     email,
                     first_name,
                     last_name,
-                    date_of_birth
+                    date_of_birth,
+                    user_role
                 )
-                VALUES (%s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s)
                 """,
                 (
                     user_id,
                     email,
                     first_name,
                     last_name,
-                    date_of_birth
+                    date_of_birth,
+                    role
                 )
             )
 
@@ -1355,18 +1357,25 @@ def query_employee_operations_summary() -> dict:
     - Top 5 busiest stations
     - Recent delays/disruptions
     """
+    from skeleton.cache import get_cache, set_cache
+    cache_key = "employee:operations:today"
+    cached = get_cache(cache_key)
+    if cached is not None:
+        return cached
+
     with _connect() as conn:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             # Today's bookings & revenue
             cur.execute("""
                 SELECT 
                     COUNT(*) as total_bookings,
-                    SUM(amount_usd) as total_revenue,
+                    COALESCE(SUM(amount_usd), 0) as total_revenue,
                     COUNT(DISTINCT user_id) as unique_passengers
                 FROM national_rail_bookings
                 WHERE travel_date = CURRENT_DATE AND status = 'confirmed'
             """)
-            today_stats = dict(cur.fetchone()) if cur.fetchone() else {}
+            row = cur.fetchone()
+            today_stats = dict(row) if row else {}
 
             # Occupancy by schedule
             cur.execute("""
@@ -1388,11 +1397,13 @@ def query_employee_operations_summary() -> dict:
             """)
             occupancy = [dict(row) for row in cur.fetchall()]
 
-            return {
+            result = {
                 "today_stats": today_stats,
                 "occupancy": occupancy,
                 "generated_at": datetime.now(timezone.utc).isoformat()
             }
+            set_cache(cache_key, result, ttl_seconds=300)
+            return result
 
 
 def query_admin_all_users() -> list[dict]:
@@ -1458,6 +1469,12 @@ def query_admin_policy_list() -> list[dict]:
 
 def query_admin_system_stats() -> dict:
     """Return system-wide statistics for admins."""
+    from skeleton.cache import get_cache, set_cache
+    cache_key = "admin:system:stats"
+    cached = get_cache(cache_key)
+    if cached is not None:
+        return cached
+
     with _connect() as conn:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             # User statistics
@@ -1479,8 +1496,8 @@ def query_admin_system_stats() -> dict:
                     SUM(CASE WHEN status = 'confirmed' THEN 1 ELSE 0 END) as confirmed,
                     SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed,
                     SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END) as cancelled,
-                    SUM(amount_usd) as total_revenue,
-                    AVG(amount_usd) as avg_booking_value
+                    COALESCE(SUM(amount_usd), 0) as total_revenue,
+                    COALESCE(AVG(amount_usd), 0) as avg_booking_value
                 FROM national_rail_bookings WHERE deleted_at IS NULL
             """)
             booking_stats = dict(cur.fetchone())
@@ -1492,21 +1509,29 @@ def query_admin_system_stats() -> dict:
                     SUM(CASE WHEN status = 'paid' THEN 1 ELSE 0 END) as paid,
                     SUM(CASE WHEN status = 'refunded' THEN 1 ELSE 0 END) as refunded,
                     SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed,
-                    SUM(amount_usd) as total_paid
+                    COALESCE(SUM(amount_usd), 0) as total_paid
                 FROM payments WHERE deleted_at IS NULL
             """)
             payment_stats = dict(cur.fetchone())
 
-            return {
+            result = {
                 "user_stats": user_stats,
                 "booking_stats": booking_stats,
                 "payment_stats": payment_stats,
                 "generated_at": datetime.now(timezone.utc).isoformat()
             }
+            set_cache(cache_key, result, ttl_seconds=900)
+            return result
 
 
 def query_admin_top_passengers() -> list[dict]:
     """Return top 10 most active passengers by booking count."""
+    from skeleton.cache import get_cache, set_cache
+    cache_key = "admin:top:passengers"
+    cached = get_cache(cache_key)
+    if cached is not None:
+        return cached
+
     with _connect() as conn:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute("""
@@ -1516,7 +1541,7 @@ def query_admin_top_passengers() -> list[dict]:
                     u.first_name,
                     u.last_name,
                     COUNT(nrb.booking_id) as booking_count,
-                    SUM(nrb.amount_usd) as total_spent
+                    COALESCE(SUM(nrb.amount_usd), 0) as total_spent
                 FROM users u
                 LEFT JOIN national_rail_bookings nrb ON u.user_id = nrb.user_id 
                     AND nrb.deleted_at IS NULL
@@ -1525,4 +1550,19 @@ def query_admin_top_passengers() -> list[dict]:
                 ORDER BY booking_count DESC
                 LIMIT 10
             """)
-            return [dict(row) for row in cur.fetchall()]
+            result = [dict(row) for row in cur.fetchall()]
+            set_cache(cache_key, result, ttl_seconds=900)
+            return result
+
+
+def delete_old_sessions(days: int = 30) -> int:
+    """Mock function to clean up old sessions (background Celery task)."""
+    print(f"[Mock] Cleaned up sessions older than {days} days.")
+    return 0
+
+
+def send_notification(user_id: str, message: str) -> bool:
+    """Mock function to send user notification (background Celery task)."""
+    print(f"[Mock] Sent notification to user {user_id}: {message}")
+    return True
+

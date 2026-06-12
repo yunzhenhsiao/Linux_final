@@ -27,6 +27,8 @@ from databases.relational.queries import (
     query_admin_top_passengers,
     query_admin_policy_list,
 )
+from skeleton.cache import invalidate_cache
+from skeleton.tasks import app as celery_app
 
 SECRET_QUESTIONS = [
     "What is the name of your first pet?",
@@ -406,11 +408,32 @@ def load_admin_policies():
         return f"Error loading policies: {str(e)}"
 
 
+def clear_admin_cache():
+    """Manually clear the administrator and employee dashboard caches."""
+    invalidate_cache("admin:*")
+    invalidate_cache("employee:*")
+    return "Cache cleared!"
+
+
+def get_task_status(task_id: str):
+    """Retrieve Celery background task status."""
+    task = celery_app.AsyncResult(task_id)
+    if task.state == 'PENDING':
+        return {"status": "Pending...", "progress": 0}
+    elif task.state == 'SUCCESS':
+        return {"status": "Completed!", "progress": 100, "result": task.result}
+    elif task.state == 'FAILURE':
+        return {"status": "Failed!", "error": str(task.info)}
+    else:
+        return {"status": task.state, "progress": 50}
+
+
 def update_dashboard(current_user: str, user_role: str):
     """Update dashboard visibility and content based on user role."""
     if not current_user or not user_role:
         return (
             gr.update(visible=False),
+            gr.update(value=""),
             gr.update(visible=False),
             gr.update(value=""),
             gr.update(value=""),
@@ -429,6 +452,7 @@ def update_dashboard(current_user: str, user_role: str):
     
     return (
         gr.update(visible=employee_visible),
+        gr.update(value=employee_content),
         gr.update(visible=admin_visible),
         gr.update(value=admin_stats_content),
         gr.update(value=admin_users_content),
@@ -584,7 +608,9 @@ with gr.Blocks(title="TransitFlow") as demo:
         with gr.Tabs():
             with gr.Tab("System Statistics"):
                 admin_stats_display = gr.Markdown("Loading...")
-                admin_stats_refresh_btn = gr.Button("🔄 Refresh", size="sm")
+                with gr.Row():
+                    admin_stats_refresh_btn = gr.Button("🔄 Refresh", size="sm")
+                    admin_clear_cache_btn = gr.Button("🔄 Clear Cache", variant="secondary", size="sm")
             
             with gr.Tab("Users"):
                 admin_users_display = gr.Markdown("Loading...")
@@ -597,6 +623,12 @@ with gr.Blocks(title="TransitFlow") as demo:
             with gr.Tab("Policies"):
                 admin_policies_display = gr.Markdown("Loading...")
                 admin_policies_refresh_btn = gr.Button("🔄 Refresh", size="sm")
+
+            with gr.Tab("Task Progress"):
+                gr.Markdown("### ⚙️ Celery Task Tracker")
+                task_id_input = gr.Textbox(label="Enter Celery Task ID")
+                check_task_btn = gr.Button("🔍 Check Task Status", variant="primary")
+                task_status_display = gr.Markdown("", visible=False)
 
     # ── Event wiring ──────────────────────────────────────────────────
 
@@ -668,6 +700,7 @@ with gr.Blocks(title="TransitFlow") as demo:
         inputs=[current_user_state, current_user_role_state],
         outputs=[
             employee_panel,
+            employee_ops_display,
             admin_panel,
             admin_stats_display,
             admin_users_display,
@@ -695,6 +728,7 @@ with gr.Blocks(title="TransitFlow") as demo:
         inputs=[current_user_state, current_user_role_state],
         outputs=[
             employee_panel,
+            employee_ops_display,
             admin_panel,
             admin_stats_display,
             admin_users_display,
@@ -726,6 +760,7 @@ with gr.Blocks(title="TransitFlow") as demo:
         inputs=[current_user_state, current_user_role_state],
         outputs=[
             employee_panel,
+            employee_ops_display,
             admin_panel,
             admin_stats_display,
             admin_users_display,
@@ -766,6 +801,14 @@ with gr.Blocks(title="TransitFlow") as demo:
         outputs=[admin_stats_display],
     )
 
+    admin_clear_cache_btn.click(
+        fn=clear_admin_cache,
+        outputs=[admin_stats_display],
+    ).then(
+        fn=load_admin_system_stats,
+        outputs=[admin_stats_display],
+    )
+
     admin_users_refresh_btn.click(
         fn=load_admin_users,
         outputs=[admin_users_display],
@@ -779,6 +822,23 @@ with gr.Blocks(title="TransitFlow") as demo:
     admin_policies_refresh_btn.click(
         fn=load_admin_policies,
         outputs=[admin_policies_display],
+    )
+
+    def check_report_progress(task_id: str):
+        if not task_id.strip():
+            return gr.update(value="⚠️ Please enter a task ID.", visible=True)
+        status = get_task_status(task_id.strip())
+        val = f"**Status:** {status['status']} ({status['progress']}%)\n"
+        if "result" in status:
+            val += f"\n**Result:**\n```json\n{status['result']}\n```"
+        elif "error" in status:
+            val += f"\n**Error:** {status['error']}"
+        return gr.update(value=val, visible=True)
+
+    check_task_btn.click(
+        fn=check_report_progress,
+        inputs=[task_id_input],
+        outputs=[task_status_display]
     )
 
 

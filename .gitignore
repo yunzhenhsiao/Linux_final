@@ -1,5 +1,7 @@
 # Environment variables — never commit API keys
 .env
+.env.prod
+
 
 # Instructor reference copies — not distributed to students
 *_og.py

@@ -348,6 +348,15 @@ TOOLS = [
         "parameters": {},
         "required": [],
     },
+    {
+        "name": "admin_generate_report",
+        "description": (
+            "Asynchronously generate the daily administrative report. "
+            "Returns a task ID that can be checked for progress. Only available to admins."
+        ),
+        "parameters": {},
+        "required": [],
+    },
 ]
 
 TOOLS_SCHEMA = """\
@@ -369,7 +378,8 @@ admin_get_system_stats() — requires admin role
 admin_list_all_users() — requires admin role
 admin_update_user_role(user_id, new_role) — requires admin role
 admin_list_policies() — requires admin role
-admin_get_top_passengers() — requires admin role"""
+admin_get_top_passengers() — requires admin role
+admin_generate_report() — requires admin role"""
 
 
 # ── Agent logic ───────────────────────────────────────────────────────────────
@@ -540,6 +550,18 @@ def _execute_tool(
             result = query_employee_operations_summary()
 
         # ── Admin tools ───────────────────────────────────────────────
+        elif tool_name == "admin_generate_report":
+            user_role = get_user_role(current_user_email) if current_user_email else None
+            if user_role != "admin":
+                return json.dumps({"error": "Access denied. This tool is only available to admins."})
+            from skeleton.tasks import generate_daily_report
+            task = generate_daily_report.delay()
+            result = {
+                "status": "processing",
+                "task_id": task.id,
+                "message": "Report generation started. Check back in 30 seconds."
+            }
+
         elif tool_name == "admin_get_system_stats":
             user_role = get_user_role(current_user_email) if current_user_email else None
             if user_role != "admin":

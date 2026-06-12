@@ -268,6 +268,14 @@ def seed_users(cur):
     user_rows = []
     for user in data:
         first_name, last_name = split_full_name(user.get("full_name", ""))
+        
+        # Predefine roles to facilitate immediate employee/admin dashboard testing
+        role = "passenger"
+        if user["user_id"] == "RU01":
+            role = "admin"
+        elif user["user_id"] == "RU02":
+            role = "employee"
+            
         user_rows.append((
             user["user_id"],
             first_name,
@@ -277,6 +285,7 @@ def seed_users(cur):
             user.get("date_of_birth"),
             user.get("registered_at"),
             user.get("is_active", True),
+            role,
         ))
     
     # Prepare credentials (hash password and secret answer with argon2id)
@@ -293,7 +302,7 @@ def seed_users(cur):
     n_users = insert_many(
         cur,
         "users",
-        ["user_id", "first_name", "last_name", "email", "phone", "date_of_birth", "registered_at", "is_active"],
+        ["user_id", "first_name", "last_name", "email", "phone", "date_of_birth", "registered_at", "is_active", "user_role"],
         user_rows,
     )
     print(f"  users: {n_users} rows")
