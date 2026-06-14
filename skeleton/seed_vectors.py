@@ -8,7 +8,6 @@ This script:
   2. Embeds each document using the configured LLM provider
   3. Stores the text + vector in PostgreSQL (policy_documents table)
 
-Note: Gemini free tier has ~1500 requests/minute — this script makes ~13 calls, well within limits.
 
 Students: To extend the assistant's knowledge, add entries to the JSON files in
 train-mock-data/ and re-run this script.
@@ -96,7 +95,7 @@ def seed():
 
             if len(embedding) != llm.embed_dim:
                 print(f"    ⚠️  Unexpected embedding dim: {len(embedding)} (expected {llm.embed_dim})")
-                print(f"    Update GEMINI_EMBED_DIM or OLLAMA_EMBED_DIM in skeleton/config.py")
+                print(f"    Update OLLAMA_EMBED_DIM in skeleton/config.py")
                 sys.exit(1)
 
             doc_id = store_policy_document(
@@ -112,8 +111,6 @@ def seed():
             print(f"    ✗ Failed: {e}")
             raise
 
-        if llm.chat_provider == "gemini" and i < len(documents) - 1:
-            time.sleep(0.5)
 
     print(f"\n✅ All {len(documents)} policy documents embedded and stored.")
     print("   Test with a similarity search:")

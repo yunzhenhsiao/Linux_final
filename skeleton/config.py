@@ -1,7 +1,6 @@
 """
 TransitFlow Configuration
 Reads from environment variables / .env file.
-Students: copy .env.example to .env and fill in your API key.
 """
 
 import os
@@ -10,14 +9,8 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # ── LLM Provider ──────────────────────────────────────────────────────────────
-# Set LLM_PROVIDER to "gemini" or "ollama"
-LLM_PROVIDER = os.getenv("LLM_PROVIDER", "ollama").lower()
-
-# Gemini settings (free tier: gemini-1.5-flash)
-GEMINI_API_KEY        = os.getenv("GEMINI_API_KEY", "")
-GEMINI_CHAT_MODEL     = os.getenv("GEMINI_CHAT_MODEL", "gemini-2.0-flash-lite")
-GEMINI_EMBED_MODEL    = os.getenv("GEMINI_EMBED_MODEL", "gemini-embedding-001")
-GEMINI_EMBED_DIM      = 3072
+# Uses Ollama (local, no API key needed)
+LLM_PROVIDER = "ollama"
 
 # Ollama settings (local, no API key needed)
 OLLAMA_BASE_URL       = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
@@ -55,4 +48,4 @@ ADMIN_KEY = os.getenv("ADMIN_KEY", "admin_master_2024")
 # ── Redis settings ────────────────────────────────────────────────────────────
 REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
 REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))
-REDIS_DB = int(os.getenv("REDIS_DB", "0"))
+REDIS_DB = int(os.getenv("REDIS_DB", "0"))

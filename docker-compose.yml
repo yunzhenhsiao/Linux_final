@@ -49,13 +49,9 @@ services:
       dockerfile: skeleton/Dockerfile
     container_name: transitflow_ui
     environment:
-      LLM_PROVIDER: ${LLM_PROVIDER:-ollama}
-      GEMINI_API_KEY: ${GEMINI_API_KEY}
-      GEMINI_CHAT_MODEL: ${GEMINI_CHAT_MODEL}
-      GEMINI_EMBED_MODEL: ${GEMINI_EMBED_MODEL}
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
-      OLLAMA_CHAT_MODEL: ${OLLAMA_CHAT_MODEL}
-      OLLAMA_EMBED_MODEL: ${OLLAMA_EMBED_MODEL}
+      OLLAMA_CHAT_MODEL: ${OLLAMA_CHAT_MODEL:-llama3.2:1b}
+      OLLAMA_EMBED_MODEL: ${OLLAMA_EMBED_MODEL:-nomic-embed-text}
       PG_HOST: postgres
       PG_PORT: 5432
       PG_USER: ${PG_USER:-transitflow}
@@ -79,13 +75,9 @@ services:
     container_name: transitflow_celery
     command: celery -A skeleton.tasks worker --loglevel=${LOG_LEVEL:-info}
     environment:
-      LLM_PROVIDER: ${LLM_PROVIDER:-ollama}
-      GEMINI_API_KEY: ${GEMINI_API_KEY}
-      GEMINI_CHAT_MODEL: ${GEMINI_CHAT_MODEL}
-      GEMINI_EMBED_MODEL: ${GEMINI_EMBED_MODEL}
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
-      OLLAMA_CHAT_MODEL: ${OLLAMA_CHAT_MODEL}
-      OLLAMA_EMBED_MODEL: ${OLLAMA_EMBED_MODEL}
+      OLLAMA_CHAT_MODEL: ${OLLAMA_CHAT_MODEL:-llama3.2:1b}
+      OLLAMA_EMBED_MODEL: ${OLLAMA_EMBED_MODEL:-nomic-embed-text}
       PG_HOST: postgres
       PG_PORT: 5432
       PG_USER: ${PG_USER:-transitflow}
@@ -108,13 +100,9 @@ services:
     container_name: transitflow_celery_beat
     command: celery -A skeleton.tasks beat --loglevel=${LOG_LEVEL:-info}
     environment:
-      LLM_PROVIDER: ${LLM_PROVIDER:-ollama}
-      GEMINI_API_KEY: ${GEMINI_API_KEY}
-      GEMINI_CHAT_MODEL: ${GEMINI_CHAT_MODEL}
-      GEMINI_EMBED_MODEL: ${GEMINI_EMBED_MODEL}
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
-      OLLAMA_CHAT_MODEL: ${OLLAMA_CHAT_MODEL}
-      OLLAMA_EMBED_MODEL: ${OLLAMA_EMBED_MODEL}
+      OLLAMA_CHAT_MODEL: ${OLLAMA_CHAT_MODEL:-llama3.2:1b}
+      OLLAMA_EMBED_MODEL: ${OLLAMA_EMBED_MODEL:-nomic-embed-text}
       PG_HOST: postgres
       PG_PORT: 5432
       PG_USER: ${PG_USER:-transitflow}
@@ -137,13 +125,9 @@ services:
     container_name: transitflow_init_db
     command: python scripts/init_db.py
     environment:
-      LLM_PROVIDER: ${LLM_PROVIDER:-ollama}
-      GEMINI_API_KEY: ${GEMINI_API_KEY}
-      GEMINI_CHAT_MODEL: ${GEMINI_CHAT_MODEL}
-      GEMINI_EMBED_MODEL: ${GEMINI_EMBED_MODEL}
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
-      OLLAMA_CHAT_MODEL: ${OLLAMA_CHAT_MODEL}
-      OLLAMA_EMBED_MODEL: ${OLLAMA_EMBED_MODEL}
+      OLLAMA_CHAT_MODEL: ${OLLAMA_CHAT_MODEL:-llama3.2:1b}
+      OLLAMA_EMBED_MODEL: ${OLLAMA_EMBED_MODEL:-nomic-embed-text}
       PG_HOST: postgres
       PG_PORT: 5432
       PG_USER: ${PG_USER:-transitflow}

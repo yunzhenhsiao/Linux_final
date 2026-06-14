@@ -9,15 +9,14 @@ from skeleton.config import (
     NEO4J_USER,
     NEO4J_PASSWORD,
     OLLAMA_BASE_URL,
-    LLM_PROVIDER,
-    GEMINI_API_KEY
 )
 
 def check_postgres():
     try:
         conn = psycopg2.connect(PG_DSN)
-        cur = conn.cursor()
-        cur.execute("SELECT 1")
+        with conn.cursor() as cur:
+            cur.execute("SELECT 1;")
+            cur.fetchone()
         conn.close()
         print("PostgreSQL connection check passed.")
         return True
@@ -29,6 +28,9 @@ def check_neo4j():
     try:
         driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD))
         driver.verify_connectivity()
+        with driver.session() as session:
+            result = session.run("MATCH (n) RETURN count(n) AS total")
+            _ = result.single()["total"]
         driver.close()
         print("Neo4j connection check passed.")
         return True
@@ -37,30 +39,19 @@ def check_neo4j():
         return False
 
 def check_llm_provider():
-    if LLM_PROVIDER == "gemini":
-        if not GEMINI_API_KEY or GEMINI_API_KEY == "your_gemini_api_key_here":
-            print("Gemini API key is missing or not configured.")
-            return False
-        try:
-            # Check if Gemini endpoint is reachable
-            response = requests.get("https://generativelanguage.googleapis.com/", timeout=5)
-            print("Gemini connectivity check passed.")
+    try:
+        response = requests.get(f"{OLLAMA_BASE_URL}/api/tags", timeout=5)
+        response.raise_for_status()
+        data = response.json()
+        if "models" in data:
+            print("Ollama ready check passed.")
             return True
-        except Exception as e:
-            print(f"Gemini connectivity check failed: {e}")
+        else:
+            print("Ollama check failed: 'models' not found in response.")
             return False
-    else: # ollama
-        try:
-            response = requests.get(f"{OLLAMA_BASE_URL}/api/tags", timeout=5)
-            if response.status_code == 200:
-                print("Ollama ready check passed.")
-                return True
-            else:
-                print(f"Ollama check failed with status code: {response.status_code}")
-                return False
-        except Exception as e:
-            print(f"Ollama check failed to connect: {e}")
-            return False
+    except Exception as e:
+        print(f"Ollama check failed to connect: {e}")
+        return False
 
 if __name__ == "__main__":
     checks = {

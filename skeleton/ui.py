@@ -13,7 +13,7 @@ sys.path.insert(0, ".")
 import gradio as gr
 from skeleton.agent import run_agent
 from skeleton.llm_provider import llm
-from skeleton.config import GEMINI_CHAT_MODEL, OLLAMA_CHAT_MODEL
+from skeleton.config import OLLAMA_CHAT_MODEL
 from databases.relational.queries import (
     login_user,
     register_user,
@@ -87,7 +87,6 @@ def get_chat_model_choices() -> list:
     for m in _KNOWN_OLLAMA_MODELS:
         label = m if m in available else f"{m}  (not pulled)"
         choices.append((label, m))
-    choices.append((f"☁️ Gemini ({GEMINI_CHAT_MODEL})", "gemini"))
     return choices
 
 
@@ -96,9 +95,6 @@ def get_initial_chat_model_value() -> str:
 
 
 def on_chat_model_change(value: str):
-    if value == "gemini":
-        status = llm.set_chat_provider("gemini")
-        return f"**Active:** ☁️ Gemini ({GEMINI_CHAT_MODEL})\n\n{status}", get_ollama_status()
     available = set(llm.get_available_ollama_models())
     if value not in available:
         return f"⚠️ `{value}` is not pulled. Run: `ollama pull {value}`", get_ollama_status()
@@ -573,7 +569,7 @@ with gr.Blocks(title="TransitFlow") as demo:
                 choices=get_chat_model_choices(),
                 value=get_initial_chat_model_value(),
                 label="Chat model",
-                info="Local Ollama models run fully locally. Gemini uses your API key.",
+                info="Select a local Ollama model to use for chat.",
             )
             provider_status = gr.Markdown(value="**Active:** llama3.2:1b")
             ollama_status   = gr.Markdown(value=get_ollama_status())
