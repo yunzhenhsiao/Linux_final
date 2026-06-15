@@ -1,73 +1,109 @@
 # skeleton/tasks.py
-from celery import Celery, shared_task
+from celery import Celery
 from celery.schedules import crontab
-import os
 from skeleton.config import REDIS_HOST, REDIS_PORT
 
-# Initialize Celery
+# ── Celery application ────────────────────────────────────────────────────────
 app = Celery(
-    'transitflow',
-    broker=f'redis://{REDIS_HOST}:{REDIS_PORT}/1',
-    backend=f'redis://{REDIS_HOST}:{REDIS_PORT}/2'
+    "transitflow",
+    broker=f"redis://{REDIS_HOST}:{REDIS_PORT}/1",
+    backend=f"redis://{REDIS_HOST}:{REDIS_PORT}/2",
 )
 
-# Configuration
 app.conf.update(
-    task_serializer='json',
-    accept_content=['json'],
-    result_serializer='json',
-    timezone='UTC',
-    enable_utc=True,
+    task_serializer="json",
+    accept_content=["json"],
+    result_serializer="json",
+    timezone="Asia/Taipei",   # 排程符合台灣本地時間
+    enable_utc=False,
 )
 
-# Beat / Cron Schedule Configuration
+# ── Beat / Cron Schedule ──────────────────────────────────────────────────────
 app.conf.beat_schedule = {
-    'generate-daily-report': {
-        'task': 'skeleton.tasks.generate_daily_report',
-        'schedule': crontab(hour=0, minute=0),  # daily at midnight
+    "generate-daily-report": {
+        "task": "skeleton.tasks.generate_daily_report",
+        "schedule": crontab(hour=0, minute=0),   # 台灣時間每日午夜 00:00
     },
-    'cleanup-old-sessions': {
-        'task': 'skeleton.tasks.cleanup_old_sessions',
-        'schedule': crontab(hour=2, minute=0),  # daily at 2 AM
+    "cleanup-old-sessions": {
+        "task": "skeleton.tasks.cleanup_old_sessions",
+        "schedule": crontab(hour=2, minute=0),   # 台灣時間每日凌晨 02:00
     },
 }
 
-@shared_task
-def generate_daily_report():
+
+# ── Tasks ─────────────────────────────────────────────────────────────────────
+
+@app.task(bind=True)
+def generate_daily_report(self):
     """Generate system operations report asynchronously."""
-    from databases.relational.queries import query_admin_system_stats
-    
-    stats = query_admin_system_stats()
-    print(f"Daily report generated: {stats}")
-    return {"status": "completed", "data": stats}
+    try:
+        from databases.relational.queries import query_admin_system_stats
 
-@shared_task
-def cleanup_old_sessions():
-    """Clean up expired user sessions daily at 2 AM."""
-    from databases.relational.queries import delete_old_sessions
-    
-    deleted_count = delete_old_sessions(days=30)
-    print(f"Cleaned up {deleted_count} old sessions.")
-    return deleted_count
+        stats = query_admin_system_stats()
+        print(f"Daily report generated: {stats}")
+        return {
+            "status": "completed",
+            "message": "Daily report generated successfully",
+            "data": stats,
+        }
+    except Exception as e:
+        print(f"Daily report failed: {e}")
+        raise
 
-@shared_task
-def send_bulk_notification(user_ids: list, message: str):
+
+@app.task(bind=True)
+def cleanup_old_sessions(self):
+    """Clean up expired user sessions daily at 2 AM (Asia/Taipei)."""
+    try:
+        from databases.relational.queries import delete_old_sessions
+
+        deleted_count = delete_old_sessions(days=30)
+        print(f"Cleaned up {deleted_count} old sessions.")
+        return {
+            "status": "completed",
+            "message": "Old sessions cleaned up successfully",
+            "deleted_count": deleted_count,
+        }
+    except Exception as e:
+        print(f"Cleanup old sessions failed: {e}")
+        raise
+
+
+@app.task(bind=True)
+def send_bulk_notification(self, user_ids: list, message: str):
     """Batch dispatch notifications to user base."""
-    from databases.relational.queries import send_notification
-    
-    for user_id in user_ids:
-        send_notification(user_id, message)
-    
-    return f"Sent notification to {len(user_ids)} users."
+    try:
+        from databases.relational.queries import send_notification
 
-@shared_task
-def update_user_roles_bulk(role_mapping: dict):
+        for user_id in user_ids:
+            send_notification(user_id, message)
+
+        return {
+            "status": "completed",
+            "message": f"Sent notification to {len(user_ids)} users",
+            "count": len(user_ids),
+        }
+    except Exception as e:
+        print(f"Send bulk notification failed: {e}")
+        raise
+
+
+@app.task(bind=True)
+def update_user_roles_bulk(self, role_mapping: dict):
     """Batch update user roles (user_id -> new_role)."""
-    from databases.relational.queries import query_admin_update_user_role
-    
-    total = 0
-    for user_id, new_role in role_mapping.items():
-        query_admin_update_user_role(user_id, new_role)
-        total += 1
-    
-    return f"Updated {total} users."
+    try:
+        from databases.relational.queries import query_admin_update_user_role
+
+        total = 0
+        for user_id, new_role in role_mapping.items():
+            query_admin_update_user_role(user_id, new_role)
+            total += 1
+
+        return {
+            "status": "completed",
+            "message": f"Updated {total} users",
+            "count": total,
+        }
+    except Exception as e:
+        print(f"Update user roles failed: {e}")
+        raise
