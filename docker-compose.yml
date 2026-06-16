@@ -89,6 +89,7 @@ services:
       REDIS_HOST: ${REDIS_HOST:-redis}
       REDIS_PORT: ${REDIS_PORT:-6379}
       REDIS_DB: ${REDIS_DB:-0}
+      PYTHONPATH: /app
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
     networks:
       - transitflow_net
@@ -114,6 +115,7 @@ services:
       REDIS_HOST: ${REDIS_HOST:-redis}
       REDIS_PORT: ${REDIS_PORT:-6379}
       REDIS_DB: ${REDIS_DB:-0}
+      PYTHONPATH: /app
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
     networks:
       - transitflow_net
@@ -149,3 +151,4 @@ volumes:
   neo4j_data_v2a:
   redis_data_v2a:
   ollama_data_v2a:
+

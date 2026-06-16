@@ -1,7 +1,18 @@
 # skeleton/tasks.py
+import sys
+from pathlib import Path
+
+# Ensure project root (/app inside container, repo root locally) is in sys.path
+# so that `from databases.relational.queries import ...` resolves correctly
+# when Celery worker loads this module.
+_ROOT = Path(__file__).resolve().parent.parent
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
+
 from celery import Celery
 from celery.schedules import crontab
 from skeleton.config import REDIS_HOST, REDIS_PORT
+
 
 # ── Celery application ────────────────────────────────────────────────────────
 app = Celery(
