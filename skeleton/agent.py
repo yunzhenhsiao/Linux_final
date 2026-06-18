@@ -351,6 +351,24 @@ TOOLS = [
     {
         "name": "admin_generate_report",
         "description": (
+            "Trigger the background Celery task to generate a daily operations report. "
+            "Use when the user asks to generate a report. Only available to admins."
+        ),
+        "parameters": {},
+        "required": [],
+    },
+    {
+        "name": "admin_cleanup_old_sessions",
+        "description": (
+            "Trigger the background Celery task to clean up old expired user sessions. "
+            "Only available to admins."
+        ),
+        "parameters": {},
+        "required": [],
+    },
+    {
+        "name": "admin_generate_report",
+        "description": (
             "Asynchronously generate the daily administrative report. "
             "Returns a task ID that can be checked for progress. Only available to admins."
         ),
@@ -562,6 +580,18 @@ def _execute_tool(
                 "message": "Report generation started. Check back in 30 seconds."
             }
 
+        elif tool_name == "admin_cleanup_old_sessions":
+            user_role = get_user_role(current_user_email) if current_user_email else None
+            if user_role != "admin":
+                return json.dumps({"error": "Access denied. This tool is only available to admins."})
+            from skeleton.tasks import cleanup_old_sessions
+            task = cleanup_old_sessions.delay()
+            result = {
+                "status": "processing",
+                "task_id": task.id,
+                "message": "Session cleanup started. Check back in a few seconds."
+            }
+
         elif tool_name == "admin_get_system_stats":
             user_role = get_user_role(current_user_email) if current_user_email else None
             if user_role != "admin":
@@ -706,14 +736,15 @@ def run_agent(
     if current_user_email:
         profile = query_user_profile(current_user_email)
         if profile:
-            user_display = f"{profile['full_name']} (email: {current_user_email}, user_id: {profile['user_id']})"
+            user_display = f"{profile['full_name']} (email: {current_user_email}, user_id: {profile['user_id']}, role: {profile.get('user_role', 'passenger')})"
         else:
             user_display = current_user_email
         contextual_prompt = SYSTEM_PROMPT + (
             f"\n\nLogged-in user: {user_display}. "
             "Answer personal booking queries for this user without asking for their email or ID. "
             "Use get_user_bookings() for any booking history request. "
-            "Use make_booking / cancel_booking for booking and cancellation requests."
+            "Use make_booking / cancel_booking for booking and cancellation requests. "
+            "If the user is an admin or employee, they can use administrative and operational tools without restriction. Do not tell an admin to log in."
         )
     else:
         contextual_prompt = SYSTEM_PROMPT + (
@@ -735,9 +766,10 @@ def run_agent(
 Or if no tool needed: {{"tool_calls": []}}
 
 STATIONS: Metro=MS01-MS20, Rail=NR01-NR10
-USER: {current_user_email or "not logged in"}
+USER: {current_user_email or "not logged in"} (Role: {profile.get('user_role', 'passenger') if current_user_email and 'profile' in locals() and profile else 'none'})
 get_user_bookings: call (no params) when logged-in user asks about their bookings, tickets, or travel history.
 make_booking/cancel_booking: only if user is logged in.
+Admin tools: available if the user is an admin.
 Route/path/journey questions: use find_route. Policy questions: use search_policy.
 Never use "" as a param value. Omit optional params if unknown.
 
