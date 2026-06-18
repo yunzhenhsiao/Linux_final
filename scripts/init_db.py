@@ -69,13 +69,70 @@ def run_seed(module: str, label: str) -> None:
         sys.exit(1)
 
 
+def wait_for_ollama(max_retries: int = 30, interval: int = 2) -> None:
+    """Block until Ollama accepts connections, or exit on timeout."""
+    import requests
+    from skeleton.config import OLLAMA_BASE_URL
+    print(f"Waiting for Ollama to become ready at {OLLAMA_BASE_URL}...")
+    for _ in range(max_retries):
+        try:
+            response = requests.get(f"{OLLAMA_BASE_URL}/api/tags", timeout=5)
+            if response.status_code == 200:
+                print("Ollama is ready!")
+                return
+        except Exception as e:
+            print(f"Ollama not ready yet. Retrying in {interval}s...")
+            time.sleep(interval)
+    print("Error: Ollama did not become ready in time.")
+    sys.exit(1)
+
+
+def pull_ollama_models() -> None:
+    """Pull required Ollama models via API request."""
+    import requests
+    from skeleton.config import OLLAMA_BASE_URL, OLLAMA_CHAT_MODEL, OLLAMA_EMBED_MODEL
+    models = [OLLAMA_CHAT_MODEL, OLLAMA_EMBED_MODEL]
+    
+    try:
+        r = requests.get(f"{OLLAMA_BASE_URL}/api/tags", timeout=5)
+        r.raise_for_status()
+        existing_models = [m["name"] for m in r.json().get("models", [])]
+    except Exception as e:
+        print(f"Failed to check existing models: {e}. Proceeding to pull anyway.")
+        existing_models = []
+
+    for model in models:
+        normalized_existing = [m.lower() for m in existing_models]
+        model_tag = model if ":" in model else f"{model}:latest"
+        
+        if model_tag.lower() in normalized_existing or model.lower() in normalized_existing:
+            print(f"Model '{model}' already exists in Ollama. Skipping pull.")
+            continue
+
+        print(f"Pulling model: {model} via Ollama API (this may take a few minutes)...")
+        try:
+            r = requests.post(
+                f"{OLLAMA_BASE_URL}/api/pull",
+                json={"name": model, "stream": False},
+                timeout=600  # 10 minutes timeout for model pull
+            )
+            r.raise_for_status()
+            print(f"Model '{model}' pulled successfully.")
+        except Exception as e:
+            print(f"Failed to pull model '{model}' via API: {e}")
+            sys.exit(1)
+
+
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 wait_for_postgres()
 wait_for_neo4j()
+wait_for_ollama()
+pull_ollama_models()
 
 run_seed("skeleton.seed_postgres", "PostgreSQL database")
 run_seed("skeleton.seed_neo4j",    "Neo4j graph database")
 run_seed("skeleton.seed_vectors",  "vector embeddings")
 
 print("All databases successfully initialized and seeded!")
+
