@@ -13,7 +13,7 @@ sys.path.insert(0, ".")
 import gradio as gr
 from skeleton.agent import run_agent
 from skeleton.llm_provider import llm
-from skeleton.config import GEMINI_CHAT_MODEL, OLLAMA_CHAT_MODEL
+from skeleton.config import OLLAMA_CHAT_MODEL
 from databases.relational.queries import (
     login_user,
     register_user,
@@ -27,6 +27,8 @@ from databases.relational.queries import (
     query_admin_top_passengers,
     query_admin_policy_list,
 )
+from skeleton.cache import invalidate_cache
+from skeleton.tasks import app as celery_app
 
 SECRET_QUESTIONS = [
     "What is the name of your first pet?",
@@ -85,7 +87,6 @@ def get_chat_model_choices() -> list:
     for m in _KNOWN_OLLAMA_MODELS:
         label = m if m in available else f"{m}  (not pulled)"
         choices.append((label, m))
-    choices.append((f"☁️ Gemini ({GEMINI_CHAT_MODEL})", "gemini"))
     return choices
 
 
@@ -94,9 +95,6 @@ def get_initial_chat_model_value() -> str:
 
 
 def on_chat_model_change(value: str):
-    if value == "gemini":
-        status = llm.set_chat_provider("gemini")
-        return f"**Active:** ☁️ Gemini ({GEMINI_CHAT_MODEL})\n\n{status}", get_ollama_status()
     available = set(llm.get_available_ollama_models())
     if value not in available:
         return f"⚠️ `{value}` is not pulled. Run: `ollama pull {value}`", get_ollama_status()
@@ -291,7 +289,7 @@ def load_employee_operations_summary():
         
         md = "### Today's Operations Summary\n\n"
         md += f"**Total Bookings:** {stats.get('total_bookings', 0)}\n"
-        md += f"**Total Revenue:** ${stats.get('total_revenue', 0):.2f}\n"
+        md += f"**Total Revenue:** ${float(stats.get('total_revenue', 0)):.2f}\n"
         md += f"**Unique Passengers:** {stats.get('unique_passengers', 0)}\n\n"
         
         md += "### Schedule Occupancy\n"
@@ -331,15 +329,15 @@ def load_admin_system_stats():
         md += f"- **Confirmed:** {booking_stats.get('confirmed', 0)}\n"
         md += f"- **Completed:** {booking_stats.get('completed', 0)}\n"
         md += f"- **Cancelled:** {booking_stats.get('cancelled', 0)}\n"
-        md += f"- **Total Revenue:** ${booking_stats.get('total_revenue', 0):.2f}\n"
-        md += f"- **Avg Booking Value:** ${booking_stats.get('avg_booking_value', 0):.2f}\n\n"
+        md += f"- **Total Revenue:** ${float(booking_stats.get('total_revenue', 0)):.2f}\n"
+        md += f"- **Avg Booking Value:** ${float(booking_stats.get('avg_booking_value', 0)):.2f}\n\n"
         
         md += "#### Payments\n"
         md += f"- **Total Payments:** {payment_stats.get('total_payments', 0)}\n"
         md += f"- **Paid:** {payment_stats.get('paid', 0)}\n"
         md += f"- **Refunded:** {payment_stats.get('refunded', 0)}\n"
         md += f"- **Failed:** {payment_stats.get('failed', 0)}\n"
-        md += f"- **Total Paid Amount:** ${payment_stats.get('total_paid', 0):.2f}\n"
+        md += f"- **Total Paid Amount:** ${float(payment_stats.get('total_paid', 0)):.2f}\n"
         
         return md
     except Exception as e:
@@ -377,7 +375,7 @@ def load_admin_top_passengers():
             md += "| Email | Name | Bookings | Total Spent |\n|---|---|---|---|\n"
             for passenger in passengers:
                 name = f"{passenger.get('first_name', '')} {passenger.get('last_name', '')}"
-                spent = passenger.get('total_spent') or 0
+                spent = float(passenger.get('total_spent') or 0)
                 md += f"| {passenger.get('email', '-')} | {name} | {passenger.get('booking_count', 0)} | ${spent:.2f} |\n"
         else:
             md += "*No passenger data available*\n"
@@ -406,11 +404,32 @@ def load_admin_policies():
         return f"Error loading policies: {str(e)}"
 
 
+def clear_admin_cache():
+    """Manually clear the administrator and employee dashboard caches."""
+    invalidate_cache("admin:*")
+    invalidate_cache("employee:*")
+    return "Cache cleared!"
+
+
+def get_task_status(task_id: str):
+    """Retrieve Celery background task status."""
+    task = celery_app.AsyncResult(task_id)
+    if task.state == 'PENDING':
+        return {"status": "Pending...", "progress": 0}
+    elif task.state == 'SUCCESS':
+        return {"status": "Completed!", "progress": 100, "result": task.result}
+    elif task.state == 'FAILURE':
+        return {"status": "Failed!", "error": str(task.info)}
+    else:
+        return {"status": task.state, "progress": 50}
+
+
 def update_dashboard(current_user: str, user_role: str):
     """Update dashboard visibility and content based on user role."""
     if not current_user or not user_role:
         return (
             gr.update(visible=False),
+            gr.update(value=""),
             gr.update(visible=False),
             gr.update(value=""),
             gr.update(value=""),
@@ -429,6 +448,7 @@ def update_dashboard(current_user: str, user_role: str):
     
     return (
         gr.update(visible=employee_visible),
+        gr.update(value=employee_content),
         gr.update(visible=admin_visible),
         gr.update(value=admin_stats_content),
         gr.update(value=admin_users_content),
@@ -452,7 +472,7 @@ EXAMPLES = [
 
 # ── Build UI ───────────────────────────────────────────────────────────────────
 
-with gr.Blocks(title="TransitFlow") as demo:
+with gr.Blocks(title="TransitFlow", theme=gr.themes.Soft(primary_hue="blue", secondary_hue="indigo")) as demo:
 
     # ── Hidden state ──────────────────────────────────────────────────
     agent_history_state = gr.State([])
@@ -549,7 +569,7 @@ with gr.Blocks(title="TransitFlow") as demo:
                 choices=get_chat_model_choices(),
                 value=get_initial_chat_model_value(),
                 label="Chat model",
-                info="Local Ollama models run fully locally. Gemini uses your API key.",
+                info="Select a local Ollama model to use for chat.",
             )
             provider_status = gr.Markdown(value="**Active:** llama3.2:1b")
             ollama_status   = gr.Markdown(value=get_ollama_status())
@@ -584,7 +604,9 @@ with gr.Blocks(title="TransitFlow") as demo:
         with gr.Tabs():
             with gr.Tab("System Statistics"):
                 admin_stats_display = gr.Markdown("Loading...")
-                admin_stats_refresh_btn = gr.Button("🔄 Refresh", size="sm")
+                with gr.Row():
+                    admin_stats_refresh_btn = gr.Button("🔄 Refresh", size="sm")
+                    admin_clear_cache_btn = gr.Button("🔄 Clear Cache", variant="secondary", size="sm")
             
             with gr.Tab("Users"):
                 admin_users_display = gr.Markdown("Loading...")
@@ -597,6 +619,12 @@ with gr.Blocks(title="TransitFlow") as demo:
             with gr.Tab("Policies"):
                 admin_policies_display = gr.Markdown("Loading...")
                 admin_policies_refresh_btn = gr.Button("🔄 Refresh", size="sm")
+
+            with gr.Tab("Task Progress"):
+                gr.Markdown("### ⚙️ Celery Task Tracker")
+                task_id_input = gr.Textbox(label="Enter Celery Task ID")
+                check_task_btn = gr.Button("🔍 Check Task Status", variant="primary")
+                task_status_display = gr.Markdown("", visible=False)
 
     # ── Event wiring ──────────────────────────────────────────────────
 
@@ -668,6 +696,7 @@ with gr.Blocks(title="TransitFlow") as demo:
         inputs=[current_user_state, current_user_role_state],
         outputs=[
             employee_panel,
+            employee_ops_display,
             admin_panel,
             admin_stats_display,
             admin_users_display,
@@ -695,6 +724,7 @@ with gr.Blocks(title="TransitFlow") as demo:
         inputs=[current_user_state, current_user_role_state],
         outputs=[
             employee_panel,
+            employee_ops_display,
             admin_panel,
             admin_stats_display,
             admin_users_display,
@@ -726,6 +756,7 @@ with gr.Blocks(title="TransitFlow") as demo:
         inputs=[current_user_state, current_user_role_state],
         outputs=[
             employee_panel,
+            employee_ops_display,
             admin_panel,
             admin_stats_display,
             admin_users_display,
@@ -766,6 +797,14 @@ with gr.Blocks(title="TransitFlow") as demo:
         outputs=[admin_stats_display],
     )
 
+    admin_clear_cache_btn.click(
+        fn=clear_admin_cache,
+        outputs=[admin_stats_display],
+    ).then(
+        fn=load_admin_system_stats,
+        outputs=[admin_stats_display],
+    )
+
     admin_users_refresh_btn.click(
         fn=load_admin_users,
         outputs=[admin_users_display],
@@ -779,6 +818,23 @@ with gr.Blocks(title="TransitFlow") as demo:
     admin_policies_refresh_btn.click(
         fn=load_admin_policies,
         outputs=[admin_policies_display],
+    )
+
+    def check_report_progress(task_id: str):
+        if not task_id.strip():
+            return gr.update(value="⚠️ Please enter a task ID.", visible=True)
+        status = get_task_status(task_id.strip())
+        val = f"**Status:** {status['status']} ({status['progress']}%)\n"
+        if "result" in status:
+            val += f"\n**Result:**\n```json\n{status['result']}\n```"
+        elif "error" in status:
+            val += f"\n**Error:** {status['error']}"
+        return gr.update(value=val, visible=True)
+
+    check_task_btn.click(
+        fn=check_report_progress,
+        inputs=[task_id_input],
+        outputs=[task_status_display]
     )
 
 

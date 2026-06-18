@@ -1,0 +1,119 @@
+version: "3.9"
+
+services:
+  postgres:
+    container_name: transitflow_postgres_prod
+    restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${PG_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 4gb
+
+  neo4j:
+    container_name: transitflow_neo4j_prod
+    restart: always
+    healthcheck:
+      test: ["CMD", "cypher-shell", "-u", "${NEO4J_USER}", "-p", "${NEO4J_PASSWORD}", "RETURN 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 15
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 4gb
+
+  redis:
+    container_name: transitflow_redis_prod
+    restart: always
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1gb
+
+  ollama:
+    container_name: transitflow_ollama_prod
+    restart: always
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'
+          memory: 8gb
+
+  ui:
+    container_name: transitflow_ui_prod
+    ports:
+      - "7860:7860"
+    restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy
+      neo4j:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "skeleton/health_check.py"]
+      interval: 30s
+      timeout: 10s
+      start_period: 40s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2gb
+
+  celery:
+    container_name: transitflow_celery_prod
+    restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2gb
+
+  celery-beat:
+    container_name: transitflow_celery_beat_prod
+    restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1gb
+
+  init-db:
+    container_name: transitflow_init_db_prod
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      neo4j:
+        condition: service_healthy

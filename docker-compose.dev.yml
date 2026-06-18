@@ -1,0 +1,108 @@
+version: "3.9"
+
+services:
+  postgres:
+    container_name: transitflow_postgres_dev
+    ports:
+      - "5433:5432"
+    restart: "no"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${PG_USER:-transitflow}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  neo4j:
+    container_name: transitflow_neo4j_dev
+    ports:
+      - "7475:7474"
+      - "7688:7687"
+    restart: "no"
+    healthcheck:
+      test: ["CMD", "cypher-shell", "-u", "${NEO4J_USER:-neo4j}", "-p", "${NEO4J_PASSWORD:-transitflow}", "RETURN 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 15
+
+  redis:
+    container_name: transitflow_redis_dev
+    ports:
+      - "6379:6379"
+    restart: "no"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  ollama:
+    container_name: transitflow_ollama_dev
+    ports:
+      - "11434:11434"
+    restart: "no"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  ui:
+    container_name: transitflow_ui_dev
+    ports:
+      - "7860:7860"
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      neo4j:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "skeleton/health_check.py"]
+      interval: 30s
+      timeout: 10s
+      start_period: 40s
+      retries: 3
+
+  celery:
+    container_name: transitflow_celery_dev
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  celery-beat:
+    container_name: transitflow_celery_beat_dev
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  init-db:
+    container_name: transitflow_init_db_dev
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      neo4j:
+        condition: service_healthy
+
+  # pgAdmin exposed only in development environment
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: transitflow_pgadmin_dev
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@admin.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+    ports:
+      - "5051:80"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - transitflow_net
