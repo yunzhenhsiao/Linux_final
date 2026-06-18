@@ -113,7 +113,7 @@ Networks: City Metro MS01-MS20 (lines M1-M4) | National Rail NR01-NR10 (lines NR
 Interchanges: Central=MS01/NR01 | Old Town=MS07/NR03 | Ferndale=MS15/NR07
 Today: {today}
 
-LOGIN RULE: Routes, fares, schedules, and policies work WITHOUT login for all users. Only make_booking and cancel_booking need login — if the user tries to book or cancel and is not logged in, tell them to log in first.
+LOGIN RULE: Routes, fares, schedules, and policies work WITHOUT login. Booking/cancelling requires passenger login. Administrative tools require admin login. If the user tries an action without the correct login, tell them to log in first.
 
 When DATA FROM TRANSITFLOW DATABASE is provided, use it as the only source of truth. Do not contradict it or say a route was not found if the data shows one.
 For route results: list every station name in order, note any line changes, and give the total travel time.
@@ -351,7 +351,7 @@ TOOLS = [
     {
         "name": "admin_generate_report",
         "description": (
-            "Trigger the background Celery task to generate a daily operations report. "
+            "Trigger the background Celery task to generate a daily operations report (revenue report, 營收報表). "
             "Use when the user asks to generate a report. Only available to admins."
         ),
         "parameters": {},
@@ -769,7 +769,7 @@ STATIONS: Metro=MS01-MS20, Rail=NR01-NR10
 USER: {current_user_email or "not logged in"} (Role: {profile.get('user_role', 'passenger') if current_user_email and 'profile' in locals() and profile else 'none'})
 get_user_bookings: call (no params) when logged-in user asks about their bookings, tickets, or travel history.
 make_booking/cancel_booking: only if user is logged in.
-Admin tools: available if the user is an admin.
+Admin tools: available if the user is an admin. (e.g. use admin_generate_report for 'revenue report' or '營收報表').
 Route/path/journey questions: use find_route. Policy questions: use search_policy.
 Never use "" as a param value. Omit optional params if unknown.
 
