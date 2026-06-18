@@ -783,6 +783,8 @@ USER: "{_augmented_message}"
 
 Examples:
 "fastest route MS01 to MS14" -> {{"tool_calls": [{{"name": "find_route", "params": {{"origin_id": "MS01", "destination_id": "MS14", "optimise_by": "time"}}}}]}}
+"幫我產生營收報表" -> {{"tool_calls": [{{"name": "admin_generate_report", "params": {{}}}}]}}
+"清理 30 天前的舊 Session" -> {{"tool_calls": [{{"name": "admin_cleanup_old_sessions", "params": {{}}}}]}}
 "cheapest NR01 to NR05" -> {{"tool_calls": [{{"name": "find_route", "params": {{"origin_id": "NR01", "destination_id": "NR05", "optimise_by": "cost"}}}}]}}
 "if NR03 is closed, what alternative routes from NR01 to NR05?" -> {{"tool_calls": [{{"name": "find_alternative_routes", "params": {{"origin_id": "NR01", "destination_id": "NR05", "avoid_station_id": "NR03"}}}}]}}
 "trains NR01 to NR03 on 2025-06-01" -> {{"tool_calls": [{{"name": "check_national_rail_availability", "params": {{"origin_id": "NR01", "destination_id": "NR03", "travel_date": "2025-06-01"}}}}]}}
