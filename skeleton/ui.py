@@ -289,7 +289,7 @@ def load_employee_operations_summary():
         
         md = "### Today's Operations Summary\n\n"
         md += f"**Total Bookings:** {stats.get('total_bookings', 0)}\n"
-        md += f"**Total Revenue:** ${stats.get('total_revenue', 0):.2f}\n"
+        md += f"**Total Revenue:** ${float(stats.get('total_revenue', 0)):.2f}\n"
         md += f"**Unique Passengers:** {stats.get('unique_passengers', 0)}\n\n"
         
         md += "### Schedule Occupancy\n"
@@ -329,15 +329,15 @@ def load_admin_system_stats():
         md += f"- **Confirmed:** {booking_stats.get('confirmed', 0)}\n"
         md += f"- **Completed:** {booking_stats.get('completed', 0)}\n"
         md += f"- **Cancelled:** {booking_stats.get('cancelled', 0)}\n"
-        md += f"- **Total Revenue:** ${booking_stats.get('total_revenue', 0):.2f}\n"
-        md += f"- **Avg Booking Value:** ${booking_stats.get('avg_booking_value', 0):.2f}\n\n"
+        md += f"- **Total Revenue:** ${float(booking_stats.get('total_revenue', 0)):.2f}\n"
+        md += f"- **Avg Booking Value:** ${float(booking_stats.get('avg_booking_value', 0)):.2f}\n\n"
         
         md += "#### Payments\n"
         md += f"- **Total Payments:** {payment_stats.get('total_payments', 0)}\n"
         md += f"- **Paid:** {payment_stats.get('paid', 0)}\n"
         md += f"- **Refunded:** {payment_stats.get('refunded', 0)}\n"
         md += f"- **Failed:** {payment_stats.get('failed', 0)}\n"
-        md += f"- **Total Paid Amount:** ${payment_stats.get('total_paid', 0):.2f}\n"
+        md += f"- **Total Paid Amount:** ${float(payment_stats.get('total_paid', 0)):.2f}\n"
         
         return md
     except Exception as e:
@@ -375,7 +375,7 @@ def load_admin_top_passengers():
             md += "| Email | Name | Bookings | Total Spent |\n|---|---|---|---|\n"
             for passenger in passengers:
                 name = f"{passenger.get('first_name', '')} {passenger.get('last_name', '')}"
-                spent = passenger.get('total_spent') or 0
+                spent = float(passenger.get('total_spent') or 0)
                 md += f"| {passenger.get('email', '-')} | {name} | {passenger.get('booking_count', 0)} | ${spent:.2f} |\n"
         else:
             md += "*No passenger data available*\n"
@@ -472,7 +472,7 @@ EXAMPLES = [
 
 # ── Build UI ───────────────────────────────────────────────────────────────────
 
-with gr.Blocks(title="TransitFlow") as demo:
+with gr.Blocks(title="TransitFlow", theme=gr.themes.Soft(primary_hue="blue", secondary_hue="indigo")) as demo:
 
     # ── Hidden state ──────────────────────────────────────────────────
     agent_history_state = gr.State([])
