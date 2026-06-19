@@ -2,11 +2,13 @@
 
 TransitFlow 是一個結合**大語言模型（LLM）Agent**、**關聯式資料庫（PostgreSQL）**與**圖形資料庫（Neo4j）**的大眾運輸智慧查詢系統。
 
-本專案透過完全容器化的微服務架構，實作了基於 RAG（檢索增強生成）的政策問答、基於 Graph 的最短/最廉路徑分析、以及基於 Celery 的非同步排程任務。
+> 📄 **完整版專題報告**：請參閱 [專題報告.md](專題報告.md) 了解系統設計理念、架構重構的詳細技術細節與量化效益評估。本文件僅涵蓋快速啟動指南。
 
-## 核心特色 (Architecture Highlights)
+本專案透過完全容器化的微服務架構，實作了基於 RAG 的政策問答、基於 Graph 的最短/最廉路徑分析、以及基於 Celery 的非同步排程任務。
 
-1. **AI Agent 推論管線**：以 `llama3.2:1b` 為核心，自動解析使用者意圖並路由至對應的資料庫查詢工具（Function Calling）。
+## 核心特色
+
+1. **AI Agent 推論管線**：以 `llama3.2:1b` 為核心，自動解析使用者意圖並路由至對應的資料庫查詢工具。
 2. **多資料庫混合架構**：
    - **PostgreSQL**: 儲存使用者、票務交易，並透過 `pgvector` 進行政策文件的向量相似度搜尋。
    - **Neo4j**: 建立站點與路線的網路拓撲，透過 APOC 庫計算 Dijkstra 最短路徑與延誤漣波分析。
@@ -16,7 +18,7 @@ TransitFlow 是一個結合**大語言模型（LLM）Agent**、**關聯式資料
    - 環境分離架構：透過 `docker-compose.yml` 搭配 `.dev.yml` / `.prod.yml` 區分開發與正式環境。
    - 內建 `condition: service_healthy` 健康檢查確保啟動順序無依賴死鎖。
 
-## 快速啟動 (One-Click Deployment)
+## 快速啟動
 
 本專案已完成全自動化腳本綁定，只需安裝 [Docker Desktop](https://www.docker.com/products/docker-desktop/) 即可一鍵啟動，**無需在本機安裝任何 Python 環境或資料庫**。
 
@@ -27,7 +29,21 @@ git clone https://github.com/your-username/Linux_final.git
 cd Linux_final
 ```
 
-### 2. 啟動系統（開發環境模式）
+### 2. (選用) 建立本地 Python 虛擬環境
+
+雖然系統完全由 Docker 執行，但為了讓 VS Code 等編輯器能提供程式碼自動補全與語法檢查，建議在本地建立虛擬環境：
+
+```bash
+python -m venv .venv
+# Windows (PowerShell)
+.venv\Scripts\Activate.ps1
+# Linux / macOS
+source .venv/bin/activate
+
+pip install -r requirements.txt
+```
+
+### 3. 啟動系統（開發環境模式）
 
 ```bash
 # 啟動所有容器（包含自動下載 Ollama 模型與寫入種子資料）
@@ -36,7 +52,7 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml --env-file .env.d
 
 *💡 系統首次啟動時，`init-db` 容器會自動建立資料表、建立 Graph 節點並下載 LLM 模型，大約需要 1~3 分鐘。*
 
-### 3. 開啟系統
+### 4. 開啟系統
 
 待容器全數啟動完畢後，開啟瀏覽器瀏覽：
 
