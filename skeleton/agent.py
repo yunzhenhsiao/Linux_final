@@ -397,7 +397,8 @@ admin_list_all_users() — requires admin role
 admin_update_user_role(user_id, new_role) — requires admin role
 admin_list_policies() — requires admin role
 admin_get_top_passengers() — requires admin role
-admin_generate_report() — requires admin role"""
+admin_generate_report() — requires admin role
+admin_cleanup_old_sessions() — requires admin role"""
 
 
 # ── Agent logic ───────────────────────────────────────────────────────────────
@@ -814,6 +815,8 @@ JSON:"""
                 "Metro fare/price/cost/how-much-does-it-cost questions → get_metro_fare. "
                 "Rail fare/cost/price questions → check_national_rail_availability then get_national_rail_fare. "
                 "Schedule/timetable/trains/services questions → check_national_rail_availability or check_metro_availability. "
+                "Revenue report/營收報表/產生報表 questions → admin_generate_report. "
+                "Cleanup old sessions/清理 session questions → admin_cleanup_old_sessions. "
                 "Only call a tool when needed. Output nothing except tool calls."
             ),
         )
@@ -849,6 +852,15 @@ JSON:"""
         tool_calls = [{"name": name, "params": params}]
         if debug:
             debug_info.append(f"**Fallback:** {reason} → {name}({params})")
+
+    # 0. Admin Celery Tasks (Bypass LLM for admin keywords)
+    _report_triggers = {"營收", "報表", "revenue report"}
+    if any(kw in _lower for kw in _report_triggers) and not _tool_selected("admin_generate_report"):
+        _fallback("admin_generate_report", {}, "admin report generation")
+
+    _session_triggers = {"session", "清理", "cleanup session"}
+    if any(kw in _lower for kw in _session_triggers) and not _tool_selected("admin_cleanup_old_sessions"):
+        _fallback("admin_cleanup_old_sessions", {}, "admin session cleanup")
 
     # 1. Delay ripple (affected stations by disruption) — check first if only 1 station
     _delay_triggers = {"disruption", "delay", "affected", "impact", "ripple", "ripple effect"}
